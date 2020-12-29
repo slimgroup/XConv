@@ -1,15 +1,12 @@
-using Flux, LinearAlgebra, Zygote, StatsBase, PyPlot, Distributed, Random
-import LinearAlgebra.BLAS: gemm!, gemv!
-
-include("ConvEV.jl")
-using .EVC
+using XConv, LinearAlgebra, Flux, PyPlot
 
 BLAS.set_num_threads(2)
-nx = 128
-ny = 128
+
+nx = 64
+ny = 64
 batchsize=10
-n_in = 1
-n_out = 16
+n_in = 4
+n_out = 4
 stride = 1
 n_bench = 5
 nw   = 3;
@@ -20,10 +17,7 @@ g20 = grad_ev(X, Y, 5, nw, stride);
 # Flux network
 C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride)
 
-# Offsets of coefficients in a vector
-offsets = [-nx-1, -nx, -nx+1, -1, 0, 1, nx-1, nx, nx+1]
-
-batches = [2^k for k=0:6]
+batches = [2^k for k=0:8]
 
 tf = zeros(length(batches))
 t1 = similar(tf)
@@ -34,11 +28,14 @@ angles = zeros(length(batches), 4)
 
 close("all")
 
-figs = Array{Any}(undef, n_in, n_out)
-axs = Array{Any}(undef, n_in, n_out)
+# Init plot
+ni = min(n_in, 3)
+no = min(n_out, 3)
+figs = Array{Any}(undef, ni, no)
+axs = Array{Any}(undef, ni, no)
 
-for ci=1:n_in
-    for co=1:n_out
+for ci=1:ni
+    for co=1:no
         figs[ci, co], axs[ci, co] = subplots(3, 3, figsize=(10, 5))
         figs[ci, co].suptitle("Conv layer gradient chi-$(ci), cho-$(co)")
     end
@@ -47,7 +44,7 @@ end
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    local X = randn(Float32, nx, ny, n_in, b)
+    local X = rand([-1f0, 1f0], nx, ny, n_in, b)
     rn() = 0 #randn(Float32, nx, ny, n_in, b)*0.01f0*norm(vec(X))
 
     p = params(C)
@@ -97,16 +94,16 @@ for (i, b)=enumerate(batches)
     end
 
     # Plot result
-    for ci=1:n_in
-        for co=1:n_out
-        local axsl = axs[ci, co][i]
-        axsl.plot(vec(g20[:, :, ci, co])/norm(g20[:, :, ci, co], Inf), label="LR(s=5)", "-r")
-        axsl.plot(vec(g21[:, :, ci, co])/norm(g21[:, :, ci, co], Inf), label="LR(s=10)", "-b")
-        axsl.plot(vec(g22[:, :, ci, co])/norm(g22[:, :, ci, co], Inf), label="LR(s=50)", "-g")
-        axsl.plot(vec(g23[:, :, ci, co])/norm(g23[:, :, ci, co], Inf), label="LR(s=100))", "-c")
-        axsl.plot(vec(g1[:, :, ci, co])/norm(g1[:, :, ci, co], Inf), label="Flux", "-k")
-        axsl.set_title("batchsize=$b")
-        i==1 && axsl.legend()
+    for ci=1:ni
+        for co=1:no
+            local axsl = axs[ci, co][i]
+            axsl.plot(vec(g20[:, :, ci, co])/norm(g20[:, :, ci, co], Inf), label="LR(s=5)", "-r")
+            axsl.plot(vec(g21[:, :, ci, co])/norm(g21[:, :, ci, co], Inf), label="LR(s=10)", "-b")
+            axsl.plot(vec(g22[:, :, ci, co])/norm(g22[:, :, ci, co], Inf), label="LR(s=50)", "-g")
+            axsl.plot(vec(g23[:, :, ci, co])/norm(g23[:, :, ci, co], Inf), label="LR(s=100))", "-c")
+            axsl.plot(vec(g1[:, :, ci, co])/norm(g1[:, :, ci, co], Inf), label="Flux", "-k")
+            axsl.set_title("batchsize=$b")
+            i==1 && axsl.legend()
         end
     end
 end
@@ -130,3 +127,5 @@ plot(batches,angles[:, 2], label="LR(s=10)")
 plot(batches,angles[:, 3], label="LR(s=50)")
 plot(batches,angles[:, 4], label="LR(s=100)")
 legend()
+
+@show angles
