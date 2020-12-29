@@ -52,9 +52,9 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float3
 end
 
 # rand
-disprand(R::CuArray) = CUDA.rand([-1f0, 1f0], size(R, 1))
+disprand(R::CuArray) = cu(rand([-1f0, 1f0], size(R, 1)))
 disprand(R::Array) = rand([-1f0, 1f0], size(R, 1))
-disprand(R::CuArray, b::Integer) = CUDA.rand([-1f0, 1f0], size(R, 1), b)
+disprand(R::CuArray, b::Integer) = cu(rand([-1f0, 1f0], size(R, 1), b))
 disprand(R::Array, b::Integer) = rand([-1f0, 1f0], size(R, 1), b)
 
 # Matvec
