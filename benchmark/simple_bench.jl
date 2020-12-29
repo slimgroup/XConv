@@ -2,11 +2,11 @@ using XConv, LinearAlgebra, Flux, PyPlot
 
 BLAS.set_num_threads(2)
 
-nx = 64
-ny = 64
+nx = 256
+ny = 256
 batchsize=10
-n_in = 4
-n_out = 4
+n_in = 2
+n_out = 2
 stride = 1
 n_bench = 5
 nw   = 3;

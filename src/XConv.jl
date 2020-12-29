@@ -1,11 +1,16 @@
 module XConv
 
-using LinearAlgebra, ChainRulesCore, CUDA
+using LinearAlgebra
+using ChainRulesCore
+using CUDA
+using NNlib
+CUDA.allowscalar(false)
 
 export grad_ev
 
 # CPU version
 include("probe.jl")
+
 
 # Main routine
 function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
@@ -26,11 +31,12 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     if be < n
         Re =  ztype(Float32, batchsize, probe_bsize)
         LRe = ztype(Float32, div(nx*ny*nchi, stride*stride), probe_bsize)
-        es = ztype(Float32, nx*ny, probe_bsize)
+        LRees = ztype(Float32, nchi, ncho, probe_bsize)
+        es = ztype(Float32, nx*ny, ncho, probe_bsize)
     else
         Re = ztype(Float32, batchsize)
         LRe = ztype(Float32, div(nx*ny*nchi, stride*stride))
-        es = ztype(Float32, nx*ny)
+        es = ztype(Float32, nx*ny, ncho)
     end
     # reshape X and Y
     Xloc = reshape(X, :, batchsize)
@@ -38,7 +44,7 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     # Probing
     for k=1:be
         be == n && LR_probe!(Xloc, Yloc, dW, Re, LRe, es, offsets, nx*ny)
-        be < n && LR_probe_batched!(Xloc, Yloc, dW, Re, LRe, es, offsets, probe_bsize, nx*ny)
+        be < n && LR_probe_batched!(Xloc, Yloc, dW, Re, LRe, es, offsets, probe_bsize, nx*ny, LRees)
     end
 
     rdiv!(dW, scale)
