@@ -12,6 +12,7 @@ using Base.Iterators: partition
 using Printf, BSON
 using Parameters: @with_kw
 using CUDA
+using XConv
 if has_cuda()
     @info "CUDA is on"
     CUDA.allowscalar(false)
@@ -119,6 +120,7 @@ function train(; kws...)
     best_acc = 0.0
     last_improvement = 0
     for epoch_idx in 1:args.epochs
+        XConv.initXConv(2^(epoch_idx+3), "EVGrad")
         # Train for a single epoch
         Flux.train!(loss, params(model), train_set, opt)
 	    

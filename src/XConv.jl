@@ -1,7 +1,7 @@
 module XConv
 
 using LinearAlgebra
-using ChainRulesCore
+using ChainRules
 using CUDA
 using NNlib
 import NNlib: is_strided
@@ -11,7 +11,7 @@ CUDA.allowscalar(false)
 export grad_ev, initXConv
 
 # Setup values
-const DEFAULT = "TrueGradd"
+const DEFAULT = "TrueGrad"
 const EV = "EVGrad"
 const _probe_size = 2^4
 const _mode = EV
@@ -26,8 +26,11 @@ include("gemm.jl")
 include("probe.jl")
 # Redefine rrule for conv
 colmajor(x) = (is_strided(x) && Base.stride(x, 1) == 1) ? x : collect(x)
+NNlib.conv(x, w, cdims) = myconv(x, w, cdims) 
+myconv(x, w, cdims) = invoke(NNlib.conv, Tuple{Any, Any, Any}, x, w, cdims)
 
-function ChainRulesCore.rrule(::typeof(NNlib.conv), x, w, cdims; kw...)
+
+function ChainRules.rrule(::typeof(myconv), x, w, cdims; kw...)
     function conv_pullback(Δ)
         println("hello ", cdims, ", ", EV)
         Δ = colmajor(Δ)
