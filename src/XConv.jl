@@ -1,6 +1,5 @@
 module XConv
 
-using Reexport
 using LinearAlgebra
 using ChainRulesCore
 using CUDA

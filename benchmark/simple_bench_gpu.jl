@@ -1,4 +1,4 @@
-using XConv, LinearAlgebra, Flux, PyPlot
+using XConv, LinearAlgebra, Flux, CUDA, PyPlot
 
 BLAS.set_num_threads(2)
 
@@ -11,17 +11,20 @@ stride = 1
 n_bench = 5
 nw   = 3;
 
+X = randn(Float32, nx, ny, n_in, batchsize) |> gpu
+Y = randn(Float32, nx, ny, n_out, batchsize) |> gpu
+g20 = grad_ev(X, Y, 5, nw, stride);
 # Flux network
-C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride)
+C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride) |> gpu
 
 batches = [2^k for k=0:8]
 
-tf = zeros(length(batches))
+tf = zeros(length(batches)) |> gpu
 t1 = similar(tf)
 t10 = similar(tf)
 t50 = similar(tf)
 t100 = similar(tf)
-angles = zeros(length(batches), 4)
+angles = zeros(length(batches), 4) |> gpu
 
 close("all")
 
@@ -41,8 +44,8 @@ end
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    local X = rand([-1f0, 1f0], nx, ny, n_in, b)
-    rn() = 0f0 #randn(Float32, nx, ny, n_in, b)*0.01f0*norm(vec(X))
+    local X = rand([-1f0, 1f0], nx, ny, n_in, b) |> gpu
+    rn() = 0 #randn(Float32, nx, ny, n_in, b)*0.01f0*norm(vec(X))
 
     p = params(C)
 

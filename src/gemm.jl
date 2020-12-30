@@ -1,5 +1,9 @@
-
 import CUDA: unsafe_free!
+
+# scal!
+scal!(a::Array{T}, s) where T = LinearAlgebra.BLAS.scal!(length(a), T(s), a, 1)
+scal!(a::CuArray{T}, s) where T = CUBLAS.scal!(length(a), T(s), a)
+
 # Matvec
 dispgemv!(tA::Char, α::Float32, A::Array{Float32, 2}, b::Array{Float32, 1}, β::Float32, c::Array{Float32, 1}) = LinearAlgebra.BLAS.gemv!(tA, α, A, b, β, c)
 dispgemv!(tA::Char, α::Float32, A::CuArray{Float32, 2}, b::CuArray{Float32, 1}, β::Float32, c::CuArray{Float32, 1}) = CUBLAS.gemv!(tA, α, A, b, β, c)
