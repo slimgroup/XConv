@@ -1,5 +1,14 @@
+function grad_ev(X::AbstractArray{Float32, 5}, Y::AbstractArray{Float32, 5},
+                 n::Integer, nw::Integer, stride::Integer=1)
+    # Get right zero function
+    new_dimsx = [size(X, i) for i=[1,2,4,5]]
+    new_dimsy = [size(Y, i) for i=[1,2,4,5]]
+    grad_ev(reshape(X, new_dimsx...), reshape(Y, new_dimsy...), n, nw, stride)
+end
 
-# Main routine
+"""
+ Gradient via trce estimation
+"""
 function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
                  n::Integer, nw::Integer, stride::Integer=1)
     # Get right zero function
