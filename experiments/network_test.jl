@@ -84,7 +84,7 @@ anynan(x) = any(isnan.(x))
 
 accuracy(x, y, model) = mean(onecold(cpu(model(x))) .== onecold(cpu(y)))
 
-function train(; kws...)	
+function train(mode; kws...)	
     args = Args(; kws...)
 
     @info("Loading data set")
@@ -120,7 +120,7 @@ function train(; kws...)
     best_acc = 0.0
     last_improvement = 0
     for epoch_idx in 1:args.epochs
-        XConv.initXConv(2^(epoch_idx+3), "EVGrad")
+        XConv.initXConv(2^(epoch_idx+3), mode)
         # Train for a single epoch
         Flux.train!(loss, params(model), train_set, opt)
 	    
@@ -186,5 +186,6 @@ function test(; kws...)
 end
 
 cd(@__DIR__) 
-train()
+@time train("TrueGrad")
+@time train("EVGrad")
 test()

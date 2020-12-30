@@ -3,22 +3,21 @@ module XConv
 using LinearAlgebra
 using ChainRules
 using CUDA
-using NNlib
+using Flux, NNlib
 import NNlib: is_strided
 
 CUDA.allowscalar(false)
 
 export grad_ev, initXConv
 
-# Setup values
+# Setup valuesa
 const DEFAULT = "TrueGrad"
 const EV = "EVGrad"
-const _probe_size = 2^4
-const _mode = EV
+const _params = Dict(:p_size => 2^4, :mode => EV)
 
 function initXConv(probe_size=2^4, mode=EV)
-    _mode = mode
-    _probe_size = probe_size
+    _params[:mode] = mode
+    _params[:p_size] = probe_size
 end
 
 # Probing
@@ -26,15 +25,22 @@ include("gemm.jl")
 include("probe.jl")
 # Redefine rrule for conv
 colmajor(x) = (is_strided(x) && Base.stride(x, 1) == 1) ? x : collect(x)
-NNlib.conv(x, w, cdims) = myconv(x, w, cdims) 
-myconv(x, w, cdims) = invoke(NNlib.conv, Tuple{Any, Any, Any}, x, w, cdims)
 
+@inline myconv(args...; kw...) = NNlib.conv(args...; kw...)
+
+# Redefine Flux conv call to bypass AD
+function (c::Flux.Conv)(x::AbstractArray)
+    # TODO: breaks gpu broadcast :(
+    # ndims(x) == ndims(c.weight)-1 && return squeezebatch(c(reshape(x, size(x)..., 1)))
+    σ, b = c.σ, reshape(c.bias, ntuple(_->1, length(c.stride))..., :, 1)
+    cdims = DenseConvDims(x, c.weight; stride=c.stride, padding=c.pad, dilation=c.dilation)
+    σ.(myconv(x, c.weight, cdims) .+ b)
+end
+  
 
 function ChainRules.rrule(::typeof(myconv), x, w, cdims; kw...)
     function conv_pullback(Δ)
-        println("hello ", cdims, ", ", EV)
-        Δ = colmajor(Δ)
-        ∇conv_filter_th = _mode == EV ?  @thunk(grad_ev(x, Δ, _probe_size, size(w, 1))) : @thunk(NNlib.∇conv_filter(x, Δ, cdims, kw...))
+        ∇conv_filter_th = _params[:mode] == EV ?  @thunk(grad_ev(x, Δ, _params[:p_size], size(w, 1))) : @thunk(NNlib.∇conv_filter(x, Δ, cdims, kw...))
         return (
             NO_FIELDS,
             @thunk(NNlib.∇conv_data(Δ, w, cdims, kw...)),

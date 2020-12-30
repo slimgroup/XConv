@@ -10,7 +10,7 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     # Get diagonals offsets
     offsets = vcat([((-1:1) .+ i*nx) for i=-div(nw,2):div(nw,2)]...)
     # subsample?
-    scale = 1/(n*(nx+ny)*sqrt(batchsize))
+    scale = 1/n
     # Is there enough probing vectors to process them in batches (currentl min(n, 16))
     n > 1 ? be = div(n, 2^4)+1 : be = 1
     probe_bsize = min(2^4, n)
@@ -78,7 +78,7 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float3
     dispgemm!('N', 'N', 1f0, L, Re, 0f0, LRe)
     # e'*L*R'*e
     @inbounds for i=1:length(offsets)
-        @time circshift!(es, reshape(e, nn, :, batch), (offsets[i], 0, 0))
+        circshift!(es, reshape(e, nn, :, batch), (offsets[i], 0, 0))
         # Reshape single probe as `nn x nci` and do Mat-vec with es dW for all input channels and sum
         Bgemm!(R)('T', 'N', 1f0, reshape(LRe, nn, :, batch), es, 0f0, LRees)
         cumsum!(LRees, LRees, dims=3)
@@ -87,7 +87,7 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float3
 end
 
 # rand
-disprand(R::CuArray) = cu(rand([-1f0, 1f0], size(R, 1)))
-disprand(R::Array) = rand([-1f0, 1f0], size(R, 1))
-disprand(R::CuArray, b::Integer) = cu(rand([-1f0, 1f0], size(R, 1), b))
-disprand(R::Array, b::Integer) = rand([-1f0, 1f0], size(R, 1), b)
+disprand(R::CuArray) = randn(Float32, size(R, 1))
+disprand(R::Array) = randn(Float32, size(R, 1))
+disprand(R::CuArray, b::Integer) = randn(Float32, size(R, 1), b)
+disprand(R::Array, b::Integer) = randn(Float32, size(R, 1), b)

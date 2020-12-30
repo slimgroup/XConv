@@ -5,8 +5,8 @@ BLAS.set_num_threads(2)
 nx = 32
 ny = 32
 batchsize=10
-n_in = 2
-n_out = 2
+n_in = 1
+n_out = 1
 stride = 1
 n_bench = 5
 nw   = 3;
@@ -26,35 +26,23 @@ angles = zeros(length(batches), 4)
 close("all")
 
 # Init plot
-ni = min(n_in, 3)
-no = min(n_out, 3)
-figs = Array{Any}(undef, ni, no)
-axs = Array{Any}(undef, ni, no)
-
-for ci=1:ni
-    for co=1:no
-        figs[ci, co], axs[ci, co] = subplots(3, 3, figsize=(10, 5))
-        figs[ci, co].suptitle("Conv layer gradient chi-$(ci), cho-$(co)")
-    end
-end
+fig, axsl = subplots(3, 3, figsize=(10, 5))
+title("Conv layer gradient chi-$(n_in), cho-$(n_out)")
 
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    local X = rand([-1f0, 1f0], nx, ny, n_in, b)
-    rn() = 0f0 #randn(Float32, nx, ny, n_in, b)*0.01f0*norm(vec(X))
+    local X = randn(Float32, nx, ny, n_in, b)
+    local Y = C(X) - randn(Float32, nx, ny, n_out, b)
 
-    p = params(C)
+    cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 
-    @time local g1 = gradient(()->.5f0*norm(C(X).+rn()), p).grads[p[1]]
+    @time local g1 = ∇conv_filter(X, Y, cdims)
     tf[i] = @elapsed begin
         for nn=1:n_bench
-            local g1 = gradient(()->.5f0*norm(C(X).+rn()), p).grads[p[1]]
+            local g1 = ∇conv_filter(X, Y, cdims)
         end
     end
-
-    tbase = @elapsed Y = C(X) .+ rn();
-    tf[i] -= n_bench*tbase
 
     @time local g20 = grad_ev(X, Y, 5, nw, stride);
     @time local g21 = grad_ev(X, Y, 10, nw, stride);
@@ -91,18 +79,13 @@ for (i, b)=enumerate(batches)
     end
 
     # Plot result
-    for ci=1:ni
-        for co=1:no
-            local axsl = axs[ci, co][i]
-            axsl.plot(vec(g20[:, :, ci, co])/norm(g20[:, :, ci, co], Inf), label="LR(s=5)", "-r")
-            axsl.plot(vec(g21[:, :, ci, co])/norm(g21[:, :, ci, co], Inf), label="LR(s=10)", "-b")
-            axsl.plot(vec(g22[:, :, ci, co])/norm(g22[:, :, ci, co], Inf), label="LR(s=50)", "-g")
-            axsl.plot(vec(g23[:, :, ci, co])/norm(g23[:, :, ci, co], Inf), label="LR(s=100))", "-c")
-            axsl.plot(vec(g1[:, :, ci, co])/norm(g1[:, :, ci, co], Inf), label="Flux", "-k")
-            axsl.set_title("batchsize=$b")
-            i==1 && axsl.legend()
-        end
-    end
+    axsl[i].plot(vec(g20)/norm(g20, Inf), label="LR(s=5)", "-r")
+    axsl[i].plot(vec(g21)/norm(g21, Inf), label="LR(s=10)", "-b")
+    axsl[i].plot(vec(g22)/norm(g22, Inf), label="LR(s=50)", "-g")
+    axsl[i].plot(vec(g23)/norm(g23, Inf), label="LR(s=100))", "-c")
+    axsl[i].plot(vec(g1)/norm(g1, Inf), label="Flux", "-k")
+    axsl[i].set_title("batchsize=$b")
+    i==1 && axsl[i].legend()
 end
 tight_layout()
 
