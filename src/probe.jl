@@ -87,7 +87,7 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float3
 end
 
 # rand
-disprand(R::CuArray) = randn(Float32, size(R, 1))
+disprand(R::CuArray) = CUDA.randn(Float32, size(R, 1))
 disprand(R::Array) = randn(Float32, size(R, 1))
-disprand(R::CuArray, b::Integer) = randn(Float32, size(R, 1), b)
+disprand(R::CuArray, b::Integer) = CUDA.randn(Float32, size(R, 1), b)
 disprand(R::Array, b::Integer) = randn(Float32, size(R, 1), b)

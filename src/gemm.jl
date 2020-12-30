@@ -1,5 +1,3 @@
-import CUDA: unsafe_free!
-
 # scal!
 scal!(a::Array{T}, s) where T = LinearAlgebra.BLAS.scal!(length(a), T(s), a, 1)
 scal!(a::CuArray{T}, s) where T = CUBLAS.scal!(length(a), T(s), a)
@@ -14,49 +12,5 @@ dispgemm!(tA::Char, tB::Char, α::Float32, A::CuArray{Float32, 2}, b::CuArray{Fl
 
 # Batched mat-mat
 Bgemm!(::Array) = NNlib.batched_gemm!
-Bgemm!(::CuArray) = gemm_batched!
+Bgemm!(::CuArray) = CUBLAS.gemm_strided_batched!
 
-# CUDA batched gemm since theirs only work on vector of matrix, not on 3D matrices
-# create a batch of pointers in device memory from a batch of device arrays
-@inline function unsafe_batch(batch::CuArray{Float32, 3}) where {T}
-    ptrb = pointer(batch)
-    strb = Base.stride(batch, 3)
-    ptrs = CuArray([ptrb + (k-1) * strb * sizeof(Float32) for k=1:size(batch, 3)])
-    return ptrs
-end
-
-function gemm_batched!(transA::Char,  transB::Char, alpha::Number,
-                       A::CuArray{Float32, 3}, B::CuArray{Float32, 3},
-                       beta::Number, C::CuArray{Float32, 3})
-
-    if size(A, 3) != size(B, 3) || size(A, 3) != size(C, 3)
-        throw(DimensionMismatch(""))
-    end
-
-    for b=1:size(A, 3)
-        m = size(A, transA == 'N' ? 1 : 2)
-        k = size(B, transA == 'N' ? 2 : 1)
-        n = size(C, transB == 'N' ? 2 : 1)
-        if m != size(C,1) || n != size(C,2) || k != size(B, transB == 'N' ? 1 : 2)
-            throw(DimensionMismatch(""))
-        end
-    end
-
-    m = size(A, transA == 'N' ? 1 : 2)
-    k = size(A, transA == 'N' ? 2 : 1)
-    n = size(B, transB == 'N' ? 2 : 1)
-
-    lda = max(1,stride(A, 2))
-    ldb = max(1,stride(B, 2))
-    ldc = max(1,stride(C, 2))
-
-    Aptrs = unsafe_batch(A)
-    Bptrs = unsafe_batch(B)
-    Cptrs = unsafe_batch(C)
-
-    CUBLAS.cublasSgemmBatched(CUBLAS.handle(), transA, transB, m, n, k, alpha, Aptrs, lda, Bptrs,
-                              ldb, beta, Cptrs, ldc, size(A, 3))
-    unsafe_free!(Cptrs)
-    unsafe_free!(Bptrs)
-    unsafe_free!(Aptrs)
-end
