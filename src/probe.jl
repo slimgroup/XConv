@@ -1,3 +1,43 @@
+
+# Main routine
+function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
+                 n::Integer, nw::Integer, stride::Integer=1)
+    # Get right zero function
+    ztype = typeof(X) <: CuArray ? CUDA.zeros : zeros
+    nx, ny, nchi, batchsize = size(X)
+    nxs, nys, ncho, batchsize = size(Y)
+    dW = ztype(Float32, nw*nw, nchi, ncho)
+    # Get diagonals offsets
+    offsets = vcat([((-1:1) .+ i*nx) for i=-div(nw,2):div(nw,2)]...)
+    # subsample?
+    scale = n*(nx+ny)*sqrt(batchsize)
+    # Is there enough probing vectors to process them in batches (currentl min(n, 16))
+    n > 1 ? be = div(n, 2^4)+1 : be = 1
+    probe_bsize = min(2^4, n)
+    # LR product temporaries
+    if be < n
+        Re =  ztype(Float32, batchsize, probe_bsize)
+        LRe = ztype(Float32, div(nx*ny*nchi, stride*stride), probe_bsize)
+        LRees = ztype(Float32, nchi, ncho, probe_bsize)
+        es = ztype(Float32, nx*ny, ncho, probe_bsize)
+    else
+        Re = ztype(Float32, batchsize)
+        LRe = ztype(Float32, div(nx*ny*nchi, stride*stride))
+        es = ztype(Float32, nx*ny, ncho)
+    end
+    # reshape X and Y
+    Xloc = reshape(X, :, batchsize)
+    Yloc = reshape(Y, :, batchsize)
+    # Probing
+    for k=1:be
+        be == n && LR_probe!(Xloc, Yloc, dW, Re, LRe, es, offsets, nx*ny)
+        be < n && LR_probe_batched!(Xloc, Yloc, dW, Re, LRe, es, offsets, probe_bsize, nx*ny, LRees)
+    end
+
+    rdiv!(dW, scale)
+    return reshape(dW, nw, nw, nchi, ncho)[end:-1:1, end:-1:1, :, :]
+end
+
 """
 LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
                    dW::AbstractArray{Float32, 4}, Re::AbstractArray{Float32, 1}, LRe::AbstractArray{Float32, 1},
@@ -51,15 +91,3 @@ disprand(R::CuArray) = cu(rand([-1f0, 1f0], size(R, 1)))
 disprand(R::Array) = rand([-1f0, 1f0], size(R, 1))
 disprand(R::CuArray, b::Integer) = cu(rand([-1f0, 1f0], size(R, 1), b))
 disprand(R::Array, b::Integer) = rand([-1f0, 1f0], size(R, 1), b)
-
-# Matvec
-dispgemv!(tA::Char, α::Float32, A::Array{Float32, 2}, b::Array{Float32, 1}, β::Float32, c::Array{Float32, 1}) = LinearAlgebra.BLAS.gemv!(tA, α, A, b, β, c)
-dispgemv!(tA::Char, α::Float32, A::CuArray{Float32, 2}, b::CuArray{Float32, 1}, β::Float32, c::CuArray{Float32, 1}) = CUBLAS.gemv!(tA, α, A, b, β, c)
-
-# MatMat
-dispgemm!(tA::Char, tB::Char, α::Float32, A::Array{Float32, 2}, b::Array{Float32, 2}, β::Float32, c::Array{Float32, 2}) = LinearAlgebra.BLAS.gemm!(tA, tB, α, A, b, β, c)
-dispgemm!(tA::Char, tB::Char, α::Float32, A::CuArray{Float32, 2}, b::CuArray{Float32, 2}, β::Float32, c::CuArray{Float32, 2}) = CUBLAS.gemm!(tA, tB, α, A, b, β, c)
-
-# Batched mat-mat
-Bgemm!(::Array) = NNlib.batched_gemm!
-Bgemm!(::CuArray) = CUBLAS.batched_gemm!
