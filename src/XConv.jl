@@ -1,42 +1,42 @@
 module XConv
 
+# Dependencies
 using LinearAlgebra
-using ChainRules
 using CUDA
 using NNlib
-import NNlib: is_strided
-
-CUDA.allowscalar(false)
 
 export grad_ev, initXConv
 
 # Setup valuesa
 const DEFAULT = "TrueGrad"
 const EV = "EVGrad"
-const _params = Dict(:p_size => 2^4, :mode => EV)
-
-function initXConv(probe_size=2^4, mode=EV)
-    _params[:mode] = mode
-    _params[:p_size] = probe_size
-end
+const _params = Dict(:p_size => 2^4, :mode => DEFAULT)
 
 # Probing
 include("gemm.jl")
 include("probe.jl")
-# Redefine rrule for conv
 
-function ChainRules.rrule(::typeof(NNlib.conv_im2col), x, w, cdims; kw...)
-    function conv_pullback(Δ)
-        ∇conv_filter_th = _params[:mode] == EV ? @thunk(grad_ev(x, Δ, _params[:p_size], size(w, 1))) : @thunk(NNlib.∇conv_filter(x, Δ, cdims, kw...))
-        return (
-            NO_FIELDS,
-            @thunk(NNlib.∇conv_data(Δ, w, cdims, kw...)),
-            ∇conv_filter_th,
-            DoesNotExist(),
-        )
-    end
-    return NNlib.conv(x, w, cdims; kw...), conv_pullback
+# EV setup function
+function initXConv(probe_size::Integer, mode::String)
+    _params[:mode] = mode
+    _params[:p_size] = probe_size
 end
 
+# Helper functions for rrule
+grad_ev_interface(x, Δ, cdims, kw...) = grad_ev(x, Δ, _params[:p_size], weightsize(cdims))
+weightsize(::DenseConvDims{N,K,C_in,C_out,S,P,D,F}) where {N,K,C_in,C_out,S,P,D,F} = K[1]
+∇conv_filter_map = Dict(EV => grad_ev_interface, DEFAULT => NNlib.∇conv_filter_im2col)
+
+# Little wrapper to have our own conv
+for N=3:5
+    for AT in [Array, CuArray]
+        @eval begin
+            function NNlib.∇conv_filter(x::$(AT){xT, $N}, dy::$(AT){wT, $N},
+                                        cdims::ConvDims; kw...) where {xT, wT}
+                return ∇conv_filter_map[_params[:mode]](x, dy, cdims; kw...)
+            end
+        end
+    end
+end
 
 end

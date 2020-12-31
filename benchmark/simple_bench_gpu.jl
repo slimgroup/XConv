@@ -45,14 +45,16 @@ for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
     local X = rand([-1f0, 1f0], nx, ny, n_in, b) |> gpu
-    rn() = 0 #randn(Float32, nx, ny, n_in, b)*0.01f0*norm(vec(X))
+    local Y = C(X) - randn(Float32, nx, ny, n_out, b)
+
+    cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 
     p = params(C)
 
-    @time local g1 = gradient(()->.5f0*norm(C(X).+rn()), p).grads[p[1]]
+    @time local g1 = ∇conv_filter(X, Y, cdims)
     tf[i] = @elapsed begin
         for nn=1:n_bench
-            local g1 = gradient(()->.5f0*norm(C(X).+rn()), p).grads[p[1]]
+            local g1 = ∇conv_filter(X, Y, cdims)
         end
     end
 
