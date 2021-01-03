@@ -1,4 +1,4 @@
-using XConv, LinearAlgebra, Flux, CUDA, PyPlot
+using XConv, LinearAlgebra, Flux, CUDA, PyPlot, BenchmarkTools
 
 BLAS.set_num_threads(2)
 
@@ -49,51 +49,25 @@ for (i, b)=enumerate(batches)
 
     cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 
-    p = params(C)
-
+    # Run once to get gradient
     @time local g1 = ∇conv_filter(X, Y, cdims)
-    tf[i] = @elapsed begin
-        for nn=1:n_bench
-            local g1 = ∇conv_filter(X, Y, cdims)
-        end
-    end
-
-    tbase = @elapsed Y = C(X) .+ rn();
-    tf[i] -= n_bench*tbase
-
     @time local g20 = grad_ev(X, Y, 5, nw, stride);
     @time local g21 = grad_ev(X, Y, 10, nw, stride);
     @time local g22 = grad_ev(X, Y, 50, nw, stride);
     @time local g23 = grad_ev(X, Y, 100, nw, stride);
 
+    # Compute similarities
     angles[i, 1] = dot(g20, g1)/(norm(g20)*norm(g1))
     angles[i, 2] = dot(g21, g1)/(norm(g21)*norm(g1))
     angles[i, 3] = dot(g22, g1)/(norm(g22)*norm(g1))
     angles[i, 4] = dot(g23, g1)/(norm(g23)*norm(g1))
 
-    t1[i] = @elapsed begin
-        for nn=1:n_bench
-            local g21 = grad_ev(X, Y, 5, nw, stride);
-        end
-    end
-
-    t10[i] = @elapsed begin
-        for nn=1:n_bench
-            local g21 = grad_ev(X, Y, 10, nw, stride);
-        end
-    end
-
-    t50[i] = @elapsed begin
-        for nn=1:n_bench
-            local g22 = grad_ev(X, Y, 50, nw, stride);
-        end
-    end
-
-    t100[i] = @elapsed begin
-        for nn=1:n_bench
-            local g23 = grad_ev(X, Y, 100, nw, stride);
-        end
-    end
+    # Benchmark runtime
+    tf[i] = mean((@benchmark ∇conv_filter($X, $Y, $cdims) samples=n_bench).times)
+    t1[i] = mean((@benchmark grad_ev($X, $Y, 5, $nw, $stride) samples=n_bench).times)
+    t10[i] = mean((@benchmark grad_ev($X, $Y, 10, $nw, $stride) samples=n_bench).times)
+    t50[i] = mean((@benchmark grad_ev($X, $Y, 50, $nw, $stride) samples=n_bench).times)
+    t100[i] = mean((@benchmark grad_ev($X, $Y, 100, $nw, $stride) samples=n_bench).times)
 
     # Plot result
     for ci=1:ni

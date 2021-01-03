@@ -49,7 +49,7 @@ LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
 """
 function LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
                    dW::AbstractArray{Float32, 3}, Re::AbstractArray{Float32, 1}, LRe::AbstractArray{Float32, 1},
-                   es::AbstractArray{Float32, 1}, offsets::AbstractArray{<:Integer, 1}, nn::Integer)
+                   es::AbstractArray{Float32, 2}, offsets::AbstractArray{<:Integer, 1}, nn::Integer)
     # Probing vector
     e = disprand(R)
     # R'*e
@@ -60,7 +60,7 @@ function LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
     @inbounds for i=1:length(offsets)
         circshift!(es, reshape(e, nn, :), (offsets[i], 0))
         # Reshape as `nn x nci` and do Mat-Nat with es reshaped as nn*nco and accumulate
-        dispgemm!('T', 'N', 1f0, reshape(LRe, nn, :), es, 1f0, view(dW, i, :, :))
+        dispgemm!('T', 'N', 1f0, reshape(LRe, nn, :), es, 1f0, dW[i, :, :])
     end
 end
 
