@@ -1,20 +1,38 @@
 using XConv, LinearAlgebra, PyPlot, Flux, BenchmarkTools, Statistics
-BLAS.set_num_threads(4)
+using Metalhead
+using Metalhead: trainimgs
+using Images: channelview
+
+BLAS.set_num_threads(Sys.CPU_THREADS)
+
+function getarray(X)
+    Float32.(permutedims(channelview(X), (2, 3, 1)))
+end
+
+function getbatch(bsize, nchin, nchout)
+    X = trainimgs(CIFAR10)
+    # X0 = randn(Float32, 32, 32, 3*nchin, bsize)
+    X0 = reshape(vcat([getarray(X[i].img) for i=rand(1:40000, bsize*nchin)]...), 32, 32, 3*nchin, bsize)
+    Y0 = reshape(vcat([getarray(X[i].img) for i=rand(1:40000, bsize*nchout)]...), 32, 32, 3*nchout, bsize)
+    return X0, Y0
+end
 
 function qi(grads, level=.95)
     qis = [quantile(abs.(grads[i, :].- mean(grads[i, :])), level) for i=1:size(grads, 1)]
     return mean(grads; dims=2)[:, 1] .- vec(qis), mean(grads; dims=2)[:, 1] .+ vec(qis)
 end
 
-nx = 128
-ny = 128
+nx = 32
+ny = 32
 n_in = 2
 n_out = 2
 
+diffgrad = Array{Any}(undef, 4, 6)
+
 close("all")
-for ps = [2^i for i=2:5]
+for ps=1:4
     fig, axs = subplots(3, 2, figsize=(10, 5), sharex=true, sharey=true)
-    fig.suptitle("Gradient comparisons \n N=$(nx)x$(ny), nchi=$(n_in), ncho=$(n_out), prob_size=$(ps)")
+    fig.suptitle("Gradient comparisons \n N=$(nx)x$(ny), nchi=$(3*n_in), ncho=$(3*n_out), prob_size=$(2^(ps+1))")
 
     for i=1:6
         batchsize= 2^(i-1)
@@ -22,11 +40,9 @@ for ps = [2^i for i=2:5]
         n_bench = 5
         nw   = 3;
 
-        X = randn(Float32, nx, ny, n_in, batchsize);
-        Y0 = randn(Float32, nx, ny, n_out, batchsize);
-
+        X, Y0 = getbatch(batchsize, n_in, n_out)
         # Flux network
-        C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride)
+        C = Conv((nw, nw), 3*n_in=>3*n_out, identity;pad=1, stride=stride)
         w = C.weight
 
         # XConv.initXConv(0, "TrueGrad")
@@ -38,7 +54,7 @@ for ps = [2^i for i=2:5]
         XConv.initXConv(0, "TrueGrad")
         @time g1 = gradient(w->.5*norm(conv(X, w;pad=1)- Y0), w)[1]
 
-        XConv.initXConv(ps, "EVGrad")
+        XConv.initXConv(2^(ps+1), "EVGrad")
         @time g2 = gradient(w->.5*norm(conv(X, w;pad=1)- Y0), w)[1]
         nn = 100
         all_g = hcat([vec(gradient(w->.5*norm(conv(X, w;pad=1)- Y0), w)[1]) for i=1:nn]...)
@@ -54,9 +70,20 @@ for ps = [2^i for i=2:5]
         axsl.fill_between(t, gm2 - st, gm2 + st, facecolor="orange", alpha=0.75, label="std($nn samples)")
         axsl.fill_between(t, qtl, qtr, facecolor="cyan", alpha=0.5, label="95% of values")
         axsl.plot(t, vec(g1), label="true")
+        diffgrad[ps, i] = vec(g1) - vec(gm2)
     end
     lines, labels = fig.axes[end].get_legend_handles_labels()
     fig.legend(lines, labels, loc = "upper left")
     tight_layout()
-    savefig("./benchmark/var_grad$(ps).png", bbox_inches="tight")
+    # savefig("./benchmark/var_grad$(ps).png", bbox_inches="tight")
 end
+
+fig, axs = subplots(2, 2, figsize=(10, 5), sharex=true, sharey=true)
+title("Errors")
+for ps=1:4
+    for i=1:6
+        axs[ps].plot(diffgrad[ps, i], label="batchsize=$(2^(i-1)), probe_size=$(2^(ps+1))")
+    end
+    axs[ps].legend()
+end
+tight_layouy()

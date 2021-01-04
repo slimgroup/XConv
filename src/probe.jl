@@ -12,12 +12,12 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     nxs, nys, ncho, batchsize = size(Y)
     dW = ztype(Float32, nw*nw, nchi, ncho)
     # Get diagonals offsets
-    offsets = vcat([((-1:1) .+ i*nx) for i=-div(nw,2):div(nw,2)]...)
-    # subsample?
-    scale = 1/n
+    offsets = vcat([((-div(nw,2):div(nw,2)) .+ i*nx) for i=-div(nw,2):div(nw,2)]...)
     # Is there enough probing vectors to process them in batches (currentl min(n, 16))
     n > 1 ? be = div(n, 2^4)+1 : be = 1
     probe_bsize = min(2^4, n)
+    # Normalize by number of probing vectors
+    scale = 1/(be*probe_bsize)
     # LR product temporaries
     if be < n
         Re =  ztype(Float32, batchsize, probe_bsize)
