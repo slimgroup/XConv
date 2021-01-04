@@ -54,7 +54,6 @@ end
 # Build model
 function build_model(args; imgsize = (28,28,1), nclasses = 10)
     cnn_output_size = Int.(floor.([imgsize[1]/8,imgsize[2]/8,32]))	
-    XConv.initXConv(2^6, "EVGrad")
 
     return Chain(
     # First convolution, operating upon a 28x28 image
@@ -85,7 +84,7 @@ anynan(x) = any(isnan.(x))
 
 accuracy(x, y, model) = mean(onecold(cpu(model(x))) .== onecold(cpu(y)))
 
-function train(; kws...)	
+function train(; kws...)
     args = Args(; kws...)
 
     @info("Loading data set")
@@ -121,6 +120,7 @@ function train(; kws...)
     best_acc = 0.0
     last_improvement = 0
     for epoch_idx in 1:args.epochs
+        XConv.initXConv(2^3, "EVGrad")
         # Train for a single epoch
         Flux.train!(loss, params(model), train_set, opt)
 	    
@@ -185,6 +185,7 @@ function test(; kws...)
     @show accuracy(test_set...,model)
 end
 
-cd(@__DIR__) 
+cd(@__DIR__)
+
 train()
 test()

@@ -37,14 +37,7 @@ for N=3:5
                 return ∇conv_filter_map[_params[:mode]](x, dy, cdims; kw...)
             end
         end
-        @eval begin
-            function NNlib.∇conv_data(Δ::$(AT){xT, $N}, w::$(AT){xT, $N}, cdims::ConvDims; kw...) where {xT, wT}
-                return @thunk(conv_data_im2col(Δ, w, cdims; kw...))
-            end
-        end
     end
 end
-
-ChainRulesCore.Thunk(T::ChainRulesCore.Thunk) = T
 
 end
