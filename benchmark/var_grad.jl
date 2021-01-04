@@ -24,8 +24,8 @@ end
 
 nx = 32
 ny = 32
-n_in = 2
-n_out = 2
+n_in = 1
+n_out = 1
 
 diffgrad = Array{Any}(undef, 4, 6)
 
@@ -82,8 +82,9 @@ fig, axs = subplots(2, 2, figsize=(10, 5), sharex=true, sharey=true)
 title("Errors")
 for ps=1:4
     for i=1:6
-        axs[ps].plot(diffgrad[ps, i], label="batchsize=$(2^(i-1)), probe_size=$(2^(ps+1))")
+        axs[ps].plot(diffgrad[ps, i], label="b=$(2^(i-1))")
     end
+    axs[ps].set_title("probe_size=$(2^(ps+1))")
     axs[ps].legend()
 end
-tight_layouy()
+tight_layout()
