@@ -11,8 +11,8 @@ end
 
 function getbatch(bsize, nchin, nchout)
     X = trainimgs(CIFAR10)
-    # X0 = randn(Float32, 32, 32, 3*nchin, bsize)
-    X0 = reshape(vcat([getarray(X[i].img) for i=rand(1:40000, bsize*nchin)]...), 32, 32, 3*nchin, bsize)
+    X0 = randn(Float32, 32, 32, 3*nchin, bsize)
+    # X0 = reshape(vcat([getarray(X[i].img) for i=rand(1:40000, bsize*nchin)]...), 32, 32, 3*nchin, bsize)
     Y0 = reshape(vcat([getarray(X[i].img) for i=rand(1:40000, bsize*nchout)]...), 32, 32, 3*nchout, bsize)
     return X0, Y0
 end
@@ -70,21 +70,24 @@ for ps=1:4
         axsl.fill_between(t, gm2 - st, gm2 + st, facecolor="orange", alpha=0.75, label="std($nn samples)")
         axsl.fill_between(t, qtl, qtr, facecolor="cyan", alpha=0.5, label="95% of values")
         axsl.plot(t, vec(g1), label="true")
-        diffgrad[ps, i] = vec(g1) - vec(gm2)
+        diffgrad[ps, i] = 1 .- vec(gm2)./vec(g1)
     end
     lines, labels = fig.axes[end].get_legend_handles_labels()
     fig.legend(lines, labels, loc = "upper left")
     tight_layout()
-    # savefig("./benchmark/var_grad$(ps).png", bbox_inches="tight")
+    savefig("./benchmark/var_grad$(ps)_CIFAR10-randX.png", bbox_inches="tight")
 end
 
-fig, axs = subplots(2, 2, figsize=(10, 5), sharex=true, sharey=true)
-title("Errors")
-for ps=1:4
-    for i=1:6
-        axs[ps].plot(diffgrad[ps, i], label="b=$(2^(i-1))")
+fig, axs = subplots(3, 2, figsize=(10, 5), sharex=true, sharey=true)
+title("Errors 1 - mean/true")
+for i=1:6
+    for ps=1:4
+        axs[i].plot(diffgrad[ps, i], label="probe_size=$(2^(ps+1))")
     end
-    axs[ps].set_title("probe_size=$(2^(ps+1))")
-    axs[ps].legend()
+    axs[i].set_title("batch_size=$(2^(i-1))")
+    axs[i].set_ylim([-1, 1])
 end
+lines, labels = fig.axes[end].get_legend_handles_labels()
+fig.legend(lines, labels, loc = "upper left")
 tight_layout()
+savefig("./benchmark/err_CIFAR10-randX.png", bbox_inches="tight")

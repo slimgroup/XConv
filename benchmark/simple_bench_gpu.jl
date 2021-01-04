@@ -1,5 +1,4 @@
 using XConv, LinearAlgebra, Flux, CUDA, PyPlot, BenchmarkTools
-CUDA.allowscalar(true)
 BLAS.set_num_threads(2)
 
 nx = 128
@@ -29,17 +28,8 @@ angles = zeros(length(batches), 4)
 close("all")
 
 # Init plot
-ni = min(n_in, 3)
-no = min(n_out, 3)
-figs = Array{Any}(undef, ni, no)
-axs = Array{Any}(undef, ni, no)
-
-for ci=1:ni
-    for co=1:no
-        figs[ci, co], axs[ci, co] = subplots(3, 3, figsize=(10, 5))
-        figs[ci, co].suptitle("Conv layer gradient chi-$(ci), cho-$(co)")
-    end
-end
+fig, axsl = subplots(3, 3, figsize=(10, 5))
+fig.suptitle("Conv layer gradient chi-$(n_in), cho-$(n_out)")
 
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
@@ -62,27 +52,24 @@ for (i, b)=enumerate(batches)
     angles[i, 3] = dot(g22, g1)/(norm(g22)*norm(g1))
     angles[i, 4] = dot(g23, g1)/(norm(g23)*norm(g1))
 
+
     # Benchmark runtime
-    tf[i] = mean((@benchmark ∇conv_filter($X, $Y, $cdims) samples=n_bench).times)
-    t1[i] = mean((@benchmark grad_ev($X, $Y, 5, $nw, $stride) samples=n_bench).times)
-    t10[i] = mean((@benchmark grad_ev($X, $Y, 10, $nw, $stride) samples=n_bench).times)
-    t50[i] = mean((@benchmark grad_ev($X, $Y, 50, $nw, $stride) samples=n_bench).times)
-    t100[i] = mean((@benchmark grad_ev($X, $Y, 100, $nw, $stride) samples=n_bench).times)
+    tf[i] = @belapsed ∇conv_filter($X, $Y, $cdims) samples=n_bench
+    t1[i] = @belapsed grad_ev($X, $Y, 5, $nw, $stride) samples=n_bench
+    t10[i] = @belapsed grad_ev($X, $Y, 10, $nw, $stride) samples=n_bench
+    t50[i] = @belapsed grad_ev($X, $Y, 50, $nw, $stride) samples=n_bench
+    t100[i] = @belapsed grad_ev($X, $Y, 100, $nw, $stride) samples=n_bench
 
     # Plot result
-    for ci=1:ni
-        for co=1:no
-            local axsl = axs[ci, co][i]
-            axsl.plot(vec(g20[:, :, ci, co])/norm(g20[:, :, ci, co], Inf), label="LR(s=5)", "-r")
-            axsl.plot(vec(g21[:, :, ci, co])/norm(g21[:, :, ci, co], Inf), label="LR(s=10)", "-b")
-            axsl.plot(vec(g22[:, :, ci, co])/norm(g22[:, :, ci, co], Inf), label="LR(s=50)", "-g")
-            axsl.plot(vec(g23[:, :, ci, co])/norm(g23[:, :, ci, co], Inf), label="LR(s=100))", "-c")
-            axsl.plot(vec(g1[:, :, ci, co])/norm(g1[:, :, ci, co], Inf), label="Flux", "-k")
-            axsl.set_title("batchsize=$b")
-            i==1 && axsl.legend()
-        end
-    end
+    axsl[i].plot(vec(g20)/norm(g20, Inf), label="LR(s=5)", "-r")
+    axsl[i].plot(vec(g21)/norm(g21, Inf), label="LR(s=10)", "-b")
+    axsl[i].plot(vec(g22)/norm(g22, Inf), label="LR(s=50)", "-g")
+    axsl[i].plot(vec(g23)/norm(g23, Inf), label="LR(s=100))", "-c")
+    axsl[i].plot(vec(g1)/norm(g1, Inf), label="Flux", "-k")
+    axsl[i].set_title("batchsize=$b")
 end
+lines, labels = fig.axes[end].get_legend_handles_labels()
+fig.legend(lines, labels, loc = "upper left")
 tight_layout()
 
 figure()

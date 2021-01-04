@@ -1,4 +1,4 @@
-using BenchmarkTools, XConv, CUDA, LinearAlgebra, NNlib, Flux
+using XConv, CUDA, LinearAlgebra, NNlib, Flux
 # CUDA param
 CUDA.allowscalar(false)
 # BLAS param
@@ -7,9 +7,9 @@ BLAS.set_num_threads(nthreads)
 
 nx = 256
 ny = 256
-b = 32
-n_in = 4
-n_out = 4
+b = 10
+n_in = 2
+n_out = 2
 stride = 1
 n_bench = 5
 nw   = 3;
@@ -20,13 +20,15 @@ nw   = 3;
 C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride)
 X = rand([-1f0, 1f0], nx, ny, n_in, b)
 Y = C(X)
-w = C.weight
 cdims = DenseConvDims(X, C.weight; padding=1)
 
 gcpu = NNlib.∇conv_filter(X, Y, cdims)
-gcpu_ev = grad_ev(X, Y, 8, nw, stride);
+gcpu_ev = grad_ev(X, Y, 10, nw, stride);
 
 @info "CPU benchmark with $(nthreads) threads"
+
+@btime gcpu = NNlib.∇conv_filter(X, Y, cdims)
+@btime gcpu_ev = grad_ev(X, Y, 10, nw, stride);
 
 @btime gcpu = NNlib.∇conv_filter(X, Y, cdims)
 @btime gcpu_ev = grad_ev(X, Y, 8, nw, stride);
