@@ -2,13 +2,13 @@ using XConv, LinearAlgebra, Flux, PyPlot, BenchmarkTools
 
 BLAS.set_num_threads(2)
 
-nx = 128
-ny = 128
+nx = 256
+ny = 256
 batchsize=10
 n_in = 1
 n_out = 1
 stride = 1
-n_bench = 20
+n_bench = 10
 nw   = 3;
 
 # Flux network
@@ -64,8 +64,9 @@ for (i, b)=enumerate(batches)
     axsl[i].plot(vec(g23)/norm(g23, Inf), label="LR(s=100))", "-c")
     axsl[i].plot(vec(g1)/norm(g1, Inf), label="Flux", "-k")
     axsl[i].set_title("batchsize=$b")
-    i==1 && axsl[i].legend()
 end
+lines, labels = fig.axes[end].get_legend_handles_labels()
+fig.legend(lines, labels, loc = "upper left")
 tight_layout()
 
 figure()

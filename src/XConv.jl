@@ -1,6 +1,7 @@
 module XConv
 
 # Dependencies
+using Random
 using LinearAlgebra
 using CUDA
 using NNlib
@@ -28,12 +29,15 @@ grad_ev_interface(x, Δ, cdims, kw...) = grad_ev(x, Δ, _params[:p_size], weight
 weightsize(::DenseConvDims{N,K,C_in,C_out,S,P,D,F}) where {N,K,C_in,C_out,S,P,D,F} = K[1]
 ∇conv_filter_map = Dict(EV => grad_ev_interface, DEFAULT => NNlib.∇conv_filter_im2col)
 
+colmajor(x) = (NNlib.is_strided(x) && Base.stride(x, 1) == 1) ? x : collect(x)
+
 # Little wrapper to have our own conv
 for N=3:5
     for AT in [Array, CuArray]
         @eval begin
             function NNlib.∇conv_filter(x::$(AT){xT, $N}, dy::$(AT){wT, $N},
                                         cdims::ConvDims; kw...) where {xT, wT}
+                dy = colmajor(dy)
                 return ∇conv_filter_map[_params[:mode]](x, dy, cdims; kw...)
             end
         end

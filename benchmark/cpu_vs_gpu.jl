@@ -10,6 +10,7 @@ stride = 1
 n_bench = 5
 nw   = 3;
 
+
 # Flux network
 C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride)
 X = rand([-1f0, 1f0], nx, ny, n_in, b)

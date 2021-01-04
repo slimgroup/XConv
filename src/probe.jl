@@ -24,18 +24,20 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
         LRe = ztype(Float32, div(nx*ny*nchi, stride*stride), probe_bsize)
         LRees = ztype(Float32, nchi, ncho, probe_bsize)
         es = ztype(Float32, nx*ny, ncho, probe_bsize)
+        e = ztype(Float32, div(nx*ny*nchi, stride*stride), probe_bsize)
     else
         Re = ztype(Float32, batchsize)
         LRe = ztype(Float32, div(nx*ny*nchi, stride*stride))
         es = ztype(Float32, nx*ny, ncho)
+        e = ztype(Float32, div(nx*ny*nchi, stride*stride))
     end
     # reshape X and Y
     Xloc = reshape(X, :, batchsize)
     Yloc = reshape(Y, :, batchsize)
     # Probing
     for k=1:be
-        be == n && LR_probe!(Xloc, Yloc, dW, Re, LRe, es, offsets, nx*ny)
-        be < n && LR_probe_batched!(Xloc, Yloc, dW, Re, LRe, es, offsets, probe_bsize, nx*ny, LRees)
+        be == n && LR_probe!(Xloc, Yloc, dW, Re, LRe, es, e, offsets, nx*ny)
+        be < n && LR_probe_batched!(Xloc, Yloc, dW, Re, LRe, es, e, offsets, probe_bsize, nx*ny, LRees)
     end
 
     scal!(dW, scale)
@@ -49,9 +51,10 @@ LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
 """
 function LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
                    dW::AbstractArray{Float32, 3}, Re::AbstractArray{Float32, 1}, LRe::AbstractArray{Float32, 1},
-                   es::AbstractArray{Float32, 2}, offsets::AbstractArray{<:Integer, 1}, nn::Integer)
+                   es::AbstractArray{Float32, 2}, e::AbstractArray{Float32, 2},
+                   offsets::AbstractArray{<:Integer, 1}, nn::Integer)
     # Probing vector
-    e = disprand(R)
+    disprand!(e)
     # R'*e
     dispgemv!('T', 1f0, R, e, 0f0, Re)
     # L*R'*e
@@ -72,10 +75,11 @@ LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
 """
 function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
                            dW::AbstractArray{Float32, 3}, Re::AbstractArray{Float32, 2}, LRe::AbstractArray{Float32, 2},
-                           es::AbstractArray{Float32, 3}, offsets::AbstractArray{<:Integer, 1},
-                           batch::Integer, nn::Integer, LRees::AbstractArray{Float32, 3})
+                           es::AbstractArray{Float32, 3}, e::AbstractArray{Float32, 2},
+                           offsets::AbstractArray{<:Integer, 1}, batch::Integer, nn::Integer,
+                           LRees::AbstractArray{Float32, 3})
     # Probing vector
-    e = disprand(R, batch)
+    disprand!(e)
     # R'*e
     dispgemm!('T', 'N', 1f0, R, e, 0f0, Re)
     # L*R'*e
@@ -91,7 +95,7 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float3
 end
 
 # rand
-disprand(R::CuArray) = CUDA.randn(Float32, size(R, 1))
-disprand(R::Array) = randn(Float32, size(R, 1))
-disprand(R::CuArray, b::Integer) = CUDA.randn(Float32, size(R, 1), b)
-disprand(R::Array, b::Integer) = randn(Float32, size(R, 1), b)
+for N=1:3
+    @eval disprand!(e::CuArray{Float32, $N}) = CUDA.randn!(e)
+    @eval disprand!(e::Array{Float32, $N}) = randn!(e)
+end
