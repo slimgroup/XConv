@@ -1,9 +1,9 @@
 using XConv, LinearAlgebra, Flux, CUDA, PyPlot, BenchmarkTools
-
+CUDA.allowscalar(true)
 BLAS.set_num_threads(2)
 
-nx = 32
-ny = 32
+nx = 128
+ny = 128
 batchsize=10
 n_in = 2
 n_out = 2
@@ -19,12 +19,12 @@ C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride) |> gpu
 
 batches = [2^k for k=0:8]
 
-tf = zeros(length(batches)) |> gpu
+tf = zeros(length(batches))
 t1 = similar(tf)
 t10 = similar(tf)
 t50 = similar(tf)
 t100 = similar(tf)
-angles = zeros(length(batches), 4) |> gpu
+angles = zeros(length(batches), 4)
 
 close("all")
 
@@ -45,7 +45,7 @@ for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
     local X = rand([-1f0, 1f0], nx, ny, n_in, b) |> gpu
-    local Y = C(X) - randn(Float32, nx, ny, n_out, b)
+    local Y = C(X) - gpu(randn(Float32, nx, ny, n_out, b))
 
     cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 

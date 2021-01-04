@@ -96,6 +96,12 @@ end
 
 # rand
 for N=1:3
-    @eval disprand!(e::CuArray{Float32, $N}) = CUDA.randn!(e)
-    @eval disprand!(e::Array{Float32, $N}) = randn!(e)
+    @eval function disprand!(e::CuArray{Float32, $N})
+        CUDA.rand!(e)
+        broadcast!(-, e, e, .5f0)
+    end
+    @eval function disprand!(e::Array{Float32, $N})
+        rand!(e)
+        broadcast!(-, e, e, .5f0)
+    end
 end
