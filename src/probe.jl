@@ -24,12 +24,12 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
         LRe = ztype(Float32, div(nx*ny*nchi, stride*stride), probe_bsize)
         LRees = ztype(Float32, nchi, ncho, probe_bsize)
         es = ztype(Float32, nx*ny, ncho, probe_bsize)
-        e = ztype(Float32, div(nx*ny*nchi, stride*stride), probe_bsize)
+        e = ztype(Float32, div(nx*ny*ncho, stride*stride), probe_bsize)
     else
         Re = ztype(Float32, batchsize)
         LRe = ztype(Float32, div(nx*ny*nchi, stride*stride))
         es = ztype(Float32, nx*ny, ncho)
-        e = ztype(Float32, div(nx*ny*nchi, stride*stride))
+        e = ztype(Float32, div(nx*ny*ncho, stride*stride))
     end
     # reshape X and Y
     Xloc = reshape(X, :, batchsize)
@@ -44,17 +44,21 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     return reshape(dW, nw, nw, nchi, ncho)[end:-1:1, end:-1:1, :, :]
 end
 
+
 """
 LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
-                   dW::AbstractArray{Float32, 4}, Re::AbstractArray{Float32, 1}, LRe::AbstractArray{Float32, 1},
-                   offsets::AbstractArray{<:Integer, 1})
-"""
-function LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
                    dW::AbstractArray{Float32, 3}, Re::AbstractArray{Float32, 1}, LRe::AbstractArray{Float32, 1},
                    es::AbstractArray{Float32, 2}, e::AbstractArray{Float32, 2},
                    offsets::AbstractArray{<:Integer, 1}, nn::Integer)
+"""
+function LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
+                   dW::AbstractArray{Float32, 3}, Re::AbstractArray{Float32, 1}, LRe::AbstractArray{Float32, 1},
+                   es::AbstractArray{Float32, 2}, e::AbstractArray{Float32, 1},
+                   offsets::AbstractArray{<:Integer, 1}, nn::Integer)
     # Probing vector
     disprand!(e)
+    # TmpW
+    tw = zeros(Float32, size(dW)[end-1:end]...)
     # R'*e
     dispgemv!('T', 1f0, R, e, 0f0, Re)
     # L*R'*e
@@ -63,15 +67,18 @@ function LR_probe!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
     @inbounds for i=1:length(offsets)
         circshift!(es, reshape(e, nn, :), (offsets[i], 0))
         # Reshape as `nn x nci` and do Mat-Nat with es reshaped as nn*nco and accumulate
-        dispgemm!('T', 'N', 1f0, reshape(LRe, nn, :), es, 1f0, dW[i, :, :])
+        dispgemm!('T', 'N', 1f0, reshape(LRe, nn, :), es, 0f0, tw)
+        @views broadcast!(+, dW[i, :, :], dW[i, :, :], tw)
     end
 end
 
 
 """
 LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
-                           dW::AbstractArray{Float32, 4}, Re::AbstractArray{Float32, 2}, LRe::AbstractArray{Float32, 2},
-                           offsets::AbstractArray{<:Integer, 1}, batch::Integer)
+                           dW::AbstractArray{Float32, 3}, Re::AbstractArray{Float32, 2}, LRe::AbstractArray{Float32, 2},
+                           es::AbstractArray{Float32, 3}, e::AbstractArray{Float32, 2},
+                           offsets::AbstractArray{<:Integer, 1}, batch::Integer, nn::Integer,
+                           LRees::AbstractArray{Float32, 3})
 """
 function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float32, 2},
                            dW::AbstractArray{Float32, 3}, Re::AbstractArray{Float32, 2}, LRe::AbstractArray{Float32, 2},
@@ -85,10 +92,12 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float3
     # L*R'*e
     dispgemm!('N', 'N', 1f0, L, Re, 0f0, LRe)
     # e'*L*R'*e
+    Lree = reshape(LRe, nn, :, batch)
+    ee =  reshape(e, nn, :, batch)
     @inbounds for i=1:length(offsets)
-        circshift!(es, reshape(e, nn, :, batch), (offsets[i], 0, 0))
+        circshift!(es, ee, ((offsets[i]), 0, 0))
         # Reshape single probe as `nn x nci` and do Mat-vec with es dW for all input channels and sum
-        Bgemm!(R)('T', 'N', 1f0, reshape(LRe, nn, :, batch), es, 0f0, LRees)
+        Bgemm!(R)('T', 'N', 1f0, Lree, es, 0f0, LRees)
         cumsum!(LRees, LRees, dims=3)
         @views broadcast!(+, dW[i, :, :], dW[i, :, :], LRees[:, :, batch])
     end
