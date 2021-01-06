@@ -10,7 +10,6 @@ dispgemv!(tA::Char, α::Float32, A::CuArray{Float32, 2}, b::CuArray{Float32, 1},
 dispgemm!(tA::Char, tB::Char, α::Float32, A::Array{Float32, 2}, b::Array{Float32, 2}, β::Float32, c) = LinearAlgebra.BLAS.gemm!(tA, tB, α, A, b, β, c)
 dispgemm!(tA::Char, tB::Char, α::Float32, A::CuArray{Float32, 2}, b::CuArray{Float32, 2}, β::Float32, c) = CUBLAS.gemm!(tA, tB, α, A, b, β, c)
 
-# Batched mat-mat
-Bgemm!(::Array) = NNlib.batched_gemm!
-Bgemm!(::CuArray) = CUBLAS.gemm_strided_batched!
-
+# Batched mat-mat
+Bgemm!(tA, tB, α, A::AbstractArray, B::AbstractArray, β, C::Array) = NNlib.batched_gemm!(tA, tB, α, A, B, β, C)
+Bgemm!(tA, tB, α, A::AbstractArray, B::AbstractArray, β, C::CuArray) = CUBLAS.gemm_strided_batched!(tA, tB, α, A, B, β, C)
