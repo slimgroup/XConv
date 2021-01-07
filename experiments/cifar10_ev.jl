@@ -6,15 +6,15 @@ using Parameters: @with_kw
 using Images: channelview
 using Statistics: mean
 using Base.Iterators: partition
-using CUDAapi
+using CUDA
+
 if has_cuda()
     @info "CUDA is on"
-    import CuArrays
-    CuArrays.allowscalar(false)
+    CUDA.allowscalar(false)
 end
 
 @with_kw mutable struct Args
-    batchsize::Int = 128
+    batchsize::Int = 32
     throttle::Int = 10
     lr::Float64 = 3e-4
     epochs::Int = 1
@@ -59,8 +59,6 @@ end
 
 # VGG16 and VGG19 models
 function vgg16()
-    XConv.initXConv(2^6, "EVGrad")
-
     return Chain(
             Conv((3, 3), 3 => 64, relu, pad=(1, 1), stride=(1, 1)),
             BatchNorm(64),
@@ -153,7 +151,7 @@ function train(; kws...)
 	
     # Load the train, validation data 
     train,val = get_processed_data(args)
-
+    @show size(train), size(val[1]), size(val[2])
     @info("Constructing Model")	
     # Defining the loss and accuracy functions
     m = vgg16()
@@ -166,6 +164,7 @@ function train(; kws...)
     opt = ADAM(args.lr)
     @info("Training....")
     # Starting to train models
+    XConv.initXConv(2^3, "EVGrad")
     Flux.@epochs args.epochs Flux.train!(loss, params(m), train, opt, cb = evalcb)
 
     return m

@@ -7,11 +7,11 @@ nthreads = div(Sys.CPU_THREADS, 2)
 BLAS.set_num_threads(nthreads)
 XConv.initXConv(0, "TrueGrad")
 
-nx = 256
-ny = 256
-b = 16
+nx = 512
+ny = 512
+b = 32
 n_in = 16
-n_out = 4
+n_out = 16
 stride = 1
 n_bench = 5
 nw   = 3;
@@ -56,6 +56,7 @@ for dtype=[Float32]
     C = Conv(CUDA.randn(dtype, nw, nw, n_in, n_out), CUDA.zeros(dtype, n_out), identity;pad=1)
     X = CUDA.randn(dtype, nx, ny, n_in, b)
     Y = C(X)
+    w = C.weight
 
     cdims = DenseConvDims(X, w; padding=1)
 
@@ -83,8 +84,8 @@ for dtype=[Float32]
     XConv.initXConv(2^3, "EVGrad")
     @time gradient(C->.5f0*norm(C(X))^2, C)
     XConv.initXConv(0, "TrueGrad")
-    @btime gradient(C->.5f0*norm(C(X))^2, C)
+    @btime gradient(C->.5f0*norm(C($X))^2, $C)
     XConv.initXConv(2^3, "EVGrad")
-    @btime gradient(C->.5f0*norm(C(X))^2, C)
+    @btime gradient(C->.5f0*norm(C($X))^2, $C)
 
 end

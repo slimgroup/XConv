@@ -84,7 +84,7 @@ anynan(x) = any(isnan.(x))
 
 accuracy(x, y, model) = mean(onecold(cpu(model(x))) .== onecold(cpu(y)))
 
-function train(; kws...)
+function train(mode; kws...)
     args = Args(; kws...)
 
     @info("Loading data set")
@@ -120,7 +120,7 @@ function train(; kws...)
     best_acc = 0.0
     last_improvement = 0
     for epoch_idx in 1:args.epochs
-        XConv.initXConv(2^3, "EVGrad")
+        XConv.initXConv(2^6, mode)
         # Train for a single epoch
         Flux.train!(loss, params(model), train_set, opt)
 	    
@@ -142,8 +142,8 @@ function train(; kws...)
 	
         # If this is the best accuracy we've seen so far, save the model out
         if acc >= best_acc
-            @info(" -> New best accuracy! Saving model out to mnist_conv.bson")
-            BSON.@save joinpath(args.savepath, "mnist_conv.bson") params=cpu.(params(model)) epoch_idx acc
+            @info(" -> New best accuracy! Saving model out to mnist_conv_$(mode).bson")
+            BSON.@save joinpath(args.savepath, "mnist_conv_$(mode).bson") params=cpu.(params(model)) epoch_idx acc
             best_acc = acc
             last_improvement = epoch_idx
         end
@@ -165,7 +165,7 @@ function train(; kws...)
 end
 
 # Testing the model, from saved model
-function test(; kws...)
+function test(mode; kws...)
     args = Args(; kws...)
     
     # Loading the test data
@@ -175,7 +175,7 @@ function test(; kws...)
     model = build_model(args)
     
     # Loading the saved parameters
-    BSON.@load joinpath(args.savepath, "mnist_conv.bson") params
+    BSON.@load joinpath(args.savepath, "mnist_conv_$(mode).bson") params
     
     # Loading parameters onto the model
     Flux.loadparams!(model, params)
@@ -187,5 +187,10 @@ end
 
 cd(@__DIR__)
 
-train()
-test()
+#train("TrueGrad";epochs=1)
+#@time train("TrueGrad")
+#test("TrueGrad")
+
+train("EVGrad"; epochs=1)
+@time train("EVGrad")
+test("EVGrad")
