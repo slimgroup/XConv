@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="generator" content="scholpandoc">
+  <meta name="viewport" content="width=device-width">
+  
+  <title>Efficient unbiased backpropagation via matrix probing for filter updates.</title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.7.1/modernizr.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/respond.js/1.4.2/respond.js"></script>
+  <link rel="stylesheet" href="https://slimgroup.slim.gatech.edu/ScholMD/standalone/slimweb-scholmd-standalone-v0.1-latest.min.css">
+</head>
+<body>
+<div class="scholmd-container">
+<div class="scholmd-main">
+<div class="scholmd-content">
+<header>
+<h1 class="scholmd-title">Efficient unbiased backpropagation via matrix probing for filter updates.</h1>
+<div class="scholmd-author">
+<p>Mathias Louboutin<sup>1</sup>, Felix J. Herrmann<sup>1</sup>, Ali Siahkoohi<sup>1</sup><br /><sup>1</sup>School of Computational Science and Engineering, Georgia Institute of Technology<br /></p>
+</div>
+</header>
+<h1 id="todo">TODO</h1>
+<ul>
+<li>[] Add refs</li>
+<li>[] Run gpu benchmark</li>
+<li>[] Cleanup theory</li>
+<li>[] Redo some plots</li>
+</ul>
+<h2 id="abstract">Abstract</h2>
+<p>bonjour</p>
+<h2 id="introduction">Introduction</h2>
+<ul>
+<li>Convolution layer gradients are expensive and main cost of CNNs.</li>
+<li>Unbiased approximation shown to be good (put refs)</li>
+<li>Lessons learned from PDE adjoint state</li>
+</ul>
+<h2 id="theory">Theory</h2>
+<p>The backpropagation through a convolution layer is the correlation between the layer input <span class="math scholmd-math-inline">\(X\)</span> and the backpropagated residual <span class="math scholmd-math-inline">\(\Delta\)</span>. 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+    \delta W[i,j] = X_{i,j} \times \Delta
+\label{grad_im2col}
+\end{equation}
+\]</span>
+ where <span class="math scholmd-math-inline">\(X_{i,j}\)</span> is <span class="math scholmd-math-inline">\(X\)</span> shifted by <span class="math scholmd-math-inline">\(i, j\)</span> in the image space (<span class="math scholmd-math-inline">\(X[x-i, Y-j, channel, batch]\)</span>). This correlation is conventionally implemented with the <em>im2col+gemm</em> algorithm.</p>
+<p>Another way to look at this update is to extract the trace of the outer product of <span class="math scholmd-math-inline">\(X\)</span> with <span class="math scholmd-math-inline">\(\Delta\)</span> at the offsets corresponding to the kernel indices, i.e the diagonals <span class="math scholmd-math-inline">\([-N_x-1, -N_x, -N_x+1, -1, 0, 1, N_x-1, N_x, N_x+1]\)</span> for a 3x3 convolution. While forming this outer-product would be unefficient both computationnaly and memory-wise, probing techniques [refs] provide estimates of the trace via averaging matrix-vector products: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+    \tilde{\delta W[i,j]} = \frac{12}{M} \sum_{i=1}^M z_i^T X \Delta^T z_i,
+\label{grad_ev}
+\end{equation}
+\]</span>
+ where <span class="math scholmd-math-inline">\(\tilde{X}, \tilde{\Delta}\)</span> are <span class="math scholmd-math-inline">\(X, \Delta\)</span> vectorized along the image and channel dimensions and <span class="math scholmd-math-inline">\(z_i\)</span> are random probing vectors drawn from <span class="math scholmd-math-inline">\(\mathcal{U}(-.5, .5)\)</span> in our case. This sum is normalized by <span class="math scholmd-math-inline">\(12\)</span> to compensate for the variance of the uniform distribution. In theory, Radamaecher or <span class="math scholmd-math-inline">\(\mathcal{N}(0, 1)\)</span> provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance.</p>
+<h1 id="simplified-performance-estimates">Simplified performance estimates</h1>
+<p>We consider here the flop estimates for two cases of a convolution layer with kernel size <span class="math scholmd-math-inline">\(K x K\)</span>. The standard dot-product based correlation of input and output, and the probing trace estimate for a single probing vector (<span class="math scholmd-math-inline">\(M=1\)</span> in Eq. <span class="scholmd-crossref"><span class="math scholmd-math-inline">\(\ref{grad_ev}\)</span></span>). We consider a signle channel input <span class="math scholmd-math-inline">\(x \in \mathcal{R}^{N_x \times N_y \times 1 \times B}\)</span> and single channel residual <span class="math scholmd-math-inline">\(\Delta \in \mathcal{R}^{N_x \times N_y \times 1 \times B}\)</span> where <span class="math scholmd-math-inline">\(N\)</span> is the number of pixels in each image dimension and <span class="math scholmd-math-inline">\(B\)</span>is the batch size.</p>
+<p>The simplest way to compute the standard gradient is to sum over batches the shifted correlation of input and output. Each of the correlation is a dot product that requires <span class="math scholmd-math-inline">\(N=N_x N_y\)</span> multiplications and <span class="math scholmd-math-inline">\(N-1\)</span> additions. This leads to the estimate: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+Flops_{std} = K B (N + N - 1) \approx 2KBN
+\label{flops-std}
+\end{equation}
+\]</span>
+ That is linear in the image dimension, kernel size and batchsize. The estimate of the trace corresponding to <span class="math scholmd-math-inline">\(\delta W[i, j]\)</span> via probing on the other hand reuqires three steps:</p>
+<ul>
+<li><ol type="1">
+<li>Multiply <span class="math scholmd-math-inline">\(\Delta\)</span> by probing the vector <span class="math scholmd-math-inline">\(z_1\)</span>.</li>
+</ol></li>
+<li><ol start="2" type="1">
+<li>Multiply the result by <span class="math scholmd-math-inline">\(X\)</span>.</li>
+</ol></li>
+<li><ol start="3" type="1">
+<li>Multiply by <span class="math scholmd-math-inline">\(z_1^{i,j}\)</span> that is <span class="math scholmd-math-inline">\(z_1\)</span> shifted by <span class="math scholmd-math-inline">\(i+N_x*j\)</span> to extract the offdiagonal trace.</li>
+</ol></li>
+</ul>
+<p>We note that steps 1 and 2 are common to all offsets and only need to be computed once. Each of these steps requires a single matrix-vector product of respective sizes <span class="math scholmd-math-inline">\(B \text{ by } N , N\)</span>, <span class="math scholmd-math-inline">\(B \text{ by } N , B\)</span> and <span class="math scholmd-math-inline">\(N , N\)</span> that sums up to: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+\begin{aligned}
+Flops_{ev} &amp;= B (N + N + N-1) + N (B + B-1) + K (N + N - 1) \\
+      &amp;= 3NB +  2BN + 2KN \\
+      &amp;= (5B + 2K) N
+\end{aligned}
+\label{flops-eiv}
+\end{equation}
+\]</span>
+ That is linear in <span class="math scholmd-math-inline">\(N\)</span> as well but affine in <span class="math scholmd-math-inline">\(B\)</span> and <span class="math scholmd-math-inline">\(K\)</span>. From these two estimate, we can compute the Flop ratio between the two methods: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+  r = \frac{2KBN}{ (5B + 2K) N} = \frac{2KN}{2K + 2B}
+\label{ratio}
+\end{equation}
+\]</span>
+ This computatonal ratio is independent of the image size since both flop estimates are linear with respect ot i. We plot this ratio for varying batch size <span class="math scholmd-math-inline">\(B\)</span> and kernel size <span class="math scholmd-math-inline">\(K\)</span> in Figure #ratio-flops. We show there that, admitely for a very simple performance model, that probing method can be cheaper up to a factor of almost 50 for large batch size. This computational adavantage comes from the fact that the batch size is absorbed in the outer product of <span class="math scholmd-math-inline">\(X\)</span> and <span class="math scholmd-math-inline">\(\Delta\)</span> rather than in a loop.</p>
+<figure class="scholmd-float scholmd-figure" id="ratio-flops">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: ">
+<img src="figures/ratio.png" />
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">1</span></span><span class="scholmd-caption-text">Ratio <span class="math scholmd-math-inline">\(\frac{2KB}{5B+2K}\)</span> for varying stencil and batch size. High value mean EIV is more efficient (up to 40 times better for small stencil, high batch size)</span></figcaption></div>
+</figure>
+<h1 id="experiments">Experiments</h1>
+<p>In order to validate our method and provide a more rigorous evalation of its efficientcy, we compare our method agains <a href="https://github.com/FluxML/NNlib.jl">NNlib.jl</a> [refs]. NNlib is an advanced librairie for CNNs that implements state of the art <em>im2col+gemm</em> on CPUs and interfaces to cuDNN on GPUs via <a href="https://github.com/JuliaGPU/CUDA.jl">CUDA.jl</a> that implements highly efficient optimized kernels. We consider the three folowing benchmarks:</p>
+<ul>
+<li>Accuracy. We look at the accuracy of the obtained gradient against the true gradient for varying batch size, image size and number of probing vectors.</li>
+<li>Biasing. We verify the the gradient is unbiased using the CIFAR10 dataset computing expectation of our gradient approximation against the true gradient.</li>
+<li>Pure performance. In this case we consider the computational runtime for a single convolution layer gradient for varying image size, batch size and number of channel. This benchmark is performed on CPU and GPU</li>
+</ul>
+<h2 id="accuracy-and-bias">Accuracy and bias</h2>
+<p>We compute the gradient with respect to the filter of <span class="math scholmd-math-inline">\(\frac{1}{2}||C(X) - Y||^2\)</span> where <span class="math scholmd-math-inline">\(C\)</span> is a convolution layer (<a href="https://github.com/FluxML/NNlib.jl">FLux.jl</a>) without bias and no activation and <span class="math scholmd-math-inline">\(Y\)</span> is a batc hof images from the CIFAR10 dataset. We consider two cases for <span class="math scholmd-math-inline">\(X\)</span>. In the first case, <span class="math scholmd-math-inline">\(X\)</span> is a batch drawn from the CIFAR10 dataset and in the second case, <span class="math scholmd-math-inline">\(X\)</span> is a random variable drawn from <span class="math scholmd-math-inline">\(\mathcal{N}(0, 1)\)</span>.</p>
+<figure class="scholmd-float scholmd-figure" id="bias-cifar10-rand">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad1_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=4</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad2_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=8</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad3_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=16</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad4_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=32</span></figcaption></div>
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">2</span></span><span class="scholmd-caption-text">Gradients for <span class="math scholmd-math-inline">\(X\)</span> drawn from the normal distribution. We can see than in expectation, the probed gradient corresponds to the true gradient making it unbiased.</span></figcaption></div>
+</figure>
+<figure class="scholmd-float scholmd-figure" id="bias-cifar10">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad1_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=4</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad2_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=8</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad3_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=16</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad4_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=32</span></figcaption></div>
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">3</span></span><span class="scholmd-caption-text">Gradients for <span class="math scholmd-math-inline">\(X\)</span> drawn from the CIFAR10 dataset. We can see than in expectation, the probed gradient corresponds to the true gradient making it unbiased.</span></figcaption></div>
+</figure>
+<p>We show these gradients on Figures <span class="scholmd-crossref"><a href="#bias-cifar10">3</a></span> and <span class="scholmd-crossref"><a href="#bias-cifar10-rand">2</a></span>. These figures demonstrates three points. First, we can see that an increasing number of probing vector leads to a better estimate of the gradient and a reduced standard deviation making a single sample a more accurate estimates. Second, we show that our estimate is unbiased as both the mean and mediam matches the the true gradient. Finally, these figures show that our gradient estimate is accurate and converges to the true gradient as the probing size increases, and we also show in Figure #batch-effect that our estimates is more accurate for larger batch sizes and/or larger images.</p>
+<h2 id="performance">Performance</h2>
+<p>We show on Figure <span class="scholmd-crossref"><a href="#cpu-bench">4</a></span> and <span class="scholmd-crossref"><a href="#gpu-bench">5</a></span> the benchmarked runtime to compute a single gradient with NNlib and with our method for varying image sizes and batch sizes. The benchmark was done for a small (4 =&gt;4) and large number of channel (32 =&gt;32).</p>
+<figure class="scholmd-float scholmd-figure" id="cpu-bench">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_4.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=4</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_4.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=4</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_8.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=8</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_8.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=8</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_16.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=16</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_16.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=16</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_32.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=32</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_32.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=32</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_64.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=64</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_64.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=64</span></figcaption></div>
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">4</span></span><span class="scholmd-caption-text">CPU benchmark on a <em>Intel(R) Xeon(R) CPU E3-1270 v6 @ 3.80GHz</em> node. The left column contains the runtimes for 4 channels and the right column for 32 channels. We can see that for large images and batc hsizes, our implementation provides a consequent performance gain.</span></figcaption></div>
+</figure>
+<figure class="scholmd-float scholmd-figure" id="gpu-bench">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_4.png" />
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">5</span></span><span class="scholmd-caption-text">GPU benchmark, placeholder</span></figcaption></div>
+</figure>
+<p>These benchmarking results show that the proposed method leads to significant speedup (up to X10) in the computation of the gradient which would lead to drastic cost reduction for training a network.</p>
+<h1 id="implementation">Implementation</h1>
+<p>Our probing algorithm is implemented in julia using BLAS on PU and CUBALS on GPU for the linear algebra computations. Code is on github.</p>
+<h1 id="conclusions">Conclusions</h1>
+<ul>
+<li>Good performance for large image and/or batchsize</li>
+<li>Don’t need many probing vector if batchsize lare enough</li>
+<li>Fairly suboptimal implementation leads to less impressive results on GPU but can be improved</li>
+</ul>
+<h1 id="references">References</h1>
+<style>
+    .scholmd-container {
+        padding-top: 60px !important;
+    }
+
+    #criticnav {
+      position: fixed;
+      z-index: 1100;
+      top: 0;
+      left: 0;
+      width: 100%;
+      border-bottom: solid 1px #696f75;
+      margin: 0;
+      padding: 0;
+      background-color: rgba(255,255,255,0.95);
+      color: #696f75;
+      font-size: 14px;
+      font-family: "Helvetica Neue", helvetica, arial, sans-serif !important
+    }
+
+    #criticnav ul {
+      list-style-type: none;
+      width: 90%;
+      margin: 0 auto;
+      padding: 0
+    }
+
+    #criticnav ul li {
+      display: block;
+      width: 15%;
+      min-width: 100px;
+      text-align: center;
+      padding: 5px 0 3px !important;
+      margin: 5px 2px !important;
+      line-height: 1em;
+      float: left;
+      text-transform: uppercase;
+      cursor: pointer;
+      -webkit-user-select: none;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0);
+      color: #777 !important
+    }
+
+    #criticnav ul li:before {
+      content: none !important
+    }
+
+    #criticnav ul li.active {
+      border: 1px solid #696f75
+    }
+
+    .original del {
+        
+            text-decoration: none;
+    }   
+
+    .original ins,
+    .original span.popover,
+    .original ins.break {
+        display: none;
+    }
+
+    .edited ins {
+        
+            text-decoration: none;
+    }   
+
+    .edited del,
+    .edited span.popover,
+    .edited ins.break {
+        display: none;
+    }
+
+    .original mark,
+    .edited mark {
+        background-color: transparent;
+    }
+
+    .markup mark {
+        background-color: #fffd38;
+        text-decoration: none;
+    }
+
+    .markup del {
+        background-color: rgba(183,47,47,0.4);
+        text-decoration: none;
+    }
+
+    .markup ins {
+        background-color: rgba(152,200,86,0.4);
+        text-decoration: none;
+    }
+
+    .markup ins.break {
+        display: block;
+        line-height: 2px;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .markup ins.break span {
+        line-height: 1.5em;
+    }
+
+    .markup .popover {
+        background-color: #e5b000;
+        color: #fff;
+    }
+
+    .markup .popover .critic.comment {
+        display: none;
+    }
+
+    .markup .popover:hover span.critic.comment {
+        display: block;
+        position: absolute;
+        width: 200px;
+        left: 30%;
+        font-size: 0.8em; 
+        color: #ccc;
+        background-color: #333;
+        z-index: 10;
+        padding: 0.5em 1em;
+        border-radius: 0.5em;
+    }
+
+    @media print {
+        #criticnav {
+            display: none !important
+        }
+    }
+}
+
+</style>
+<div id="criticnav">
+<ul>
+<li id="markup-button">
+Markup
+</li>
+<li id="original-button">
+Original
+</li>
+<li id="edited-button">
+Edited
+</li>
+</ul>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script type="text/javascript">
+
+    function critic() {
+
+        $('.scholmd-container').addClass('markup');
+        $('#markup-button').addClass('active');
+        $('ins.break').unwrap();
+        $('span.critic.comment').wrap('<span class="popover" />');
+        $('span.critic.comment').before('&#8225;');
+
+    }  
+
+    function original() {
+        $('#original-button').addClass('active');
+        $('#edited-button').removeClass('active');
+        $('#markup-button').removeClass('active');
+
+        $('.scholmd-container').addClass('original');
+        $('.scholmd-container').removeClass('edited');
+        $('.scholmd-container').removeClass('markup');
+    }
+
+    function edited() {
+        $('#original-button').removeClass('active');
+        $('#edited-button').addClass('active');
+        $('#markup-button').removeClass('active');
+
+        $('.scholmd-container').removeClass('original');
+        $('.scholmd-container').addClass('edited');
+        $('.scholmd-container').removeClass('markup');
+    } 
+
+    function markup() {
+        $('#original-button').removeClass('active');
+        $('#edited-button').removeClass('active');
+        $('#markup-button').addClass('active');
+
+        $('.scholmd-container').removeClass('original');
+        $('.scholmd-container').removeClass('edited');
+        $('.scholmd-container').addClass('markup');
+    }
+
+    var o = document.getElementById("original-button");
+    var e = document.getElementById("edited-button");
+    var m = document.getElementById("markup-button");
+
+    window.onload = critic;
+    o.onclick = original;
+    e.onclick = edited;
+    m.onclick = markup;
+
+</script>
+<div class="references">
+
+</div>
+</div>
+</div>
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+    tex2jax: {
+      processClass: "math"
+    },
+    TeX: {
+        TagSide: "left",
+        TagIndent: "1.2em",
+        equationNumbers: {
+            autoNumber: "AMS"
+        },
+        Macros: {
+            ensuremath: ["#1",1],
+            textsf: ["\\mathsf{\\text{#1}}",1],
+            texttt: ["\\mathtt{\\text{#1}}",1]
+        }
+    },
+    "HTML-CSS": { 
+        scale: 100,
+        availableFonts: ["TeX"], 
+        preferredFont: "TeX",
+        webFont: "TeX",
+        imageFont: "TeX",
+        EqnChunk: 1000
+    }
+});
+</script>
+<script src="https://slimgroup.slim.gatech.edu/MathJax/MathJax.js?config=TeX-AMS_HTML-full" type="text/javascript"></script>
+</div>
+</body>
+</html>
