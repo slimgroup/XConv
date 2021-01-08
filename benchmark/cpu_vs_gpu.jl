@@ -1,5 +1,6 @@
-using XConv, BenchmarkTools, LinearAlgebra, Flux, CUDA
-
+using XConv, CUDA, LinearAlgebra, NNlib, Flux
+import Flux: mse
+using BenchmarkTools
 # CUDA param
 CUDA.allowscalar(false)
 # BLAS param

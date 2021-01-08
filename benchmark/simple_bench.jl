@@ -7,9 +7,9 @@ BenchmarkTools.DEFAULT_PARAMETERS.samples = n_bench
 
 nx = 128
 ny = 128
-batchsize=10
-n_in = 8
-n_out = 8
+batchsize = 32
+n_in = 4
+n_out = 4
 stride = 1
 nw   = 3;
 

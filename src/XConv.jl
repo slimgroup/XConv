@@ -25,7 +25,6 @@ function initXConv(probe_size::Integer, mode::String)
 end
 
 # Helper functions for rrule
-# Helper functions for rrule
 weightsize(::DenseConvDims{N,K,C_in,C_out,S,P,D,F}) where {N,K,C_in,C_out,S,P,D,F} = K[1]
 
 colmajor(x) = (NNlib.is_strided(x) && Base.stride(x, 1) == 1) ? x : collect(x)
