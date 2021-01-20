@@ -1,20 +1,22 @@
 using XConv, LinearAlgebra, PyPlot, Flux, BenchmarkTools, Statistics
-using Metalhead
-using Metalhead: trainimgs
-using Images: channelview
+using MLDatasets
 
 BLAS.set_num_threads(Sys.CPU_THREADS)
 
-function getarray(X)
-    Float32.(permutedims(channelview(X), (2, 3, 1)))
+function getbatch_CIFAR10(bsize, nchin, nchout; gaussian=false)
+    X, _ = CIFAR10.traindata();
+    gaussian && (X0 = randn(Float32, 32, 32, 3*nchin, bsize))
+    !gaussian && (X0 = reshape(X[:, :, :, rand(1:50000, bsize*nchin)], 32, 32, 3*nchin, bsize))
+    Y0 = reshape(X[:, :, :, rand(1:50000, bsize*nchout)], 32, 32, 3*nchout, bsize)
+    return Float32.(X0), Float32.(Y0)
 end
 
-function getbatch(bsize, nchin, nchout)
-    X = trainimgs(CIFAR10)
-    X0 = randn(Float32, 32, 32, 3*nchin, bsize)
-    # X0 = reshape(vcat([getarray(X[i].img) for i=rand(1:40000, bsize*nchin)]...), 32, 32, 3*nchin, bsize)
-    Y0 = reshape(vcat([getarray(X[i].img) for i=rand(1:40000, bsize*nchout)]...), 32, 32, 3*nchout, bsize)
-    return X0, Y0
+function getbatch_MNIST(bsize, nchin, nchout;gaussian=false)
+    X, _ = MNIST.traindata();
+    gaussian && (X0 = randn(Float32, 32, 32, nchin, bsize))
+    !gaussian && (X0 = reshape(X[:, :, rand(1:60000, 3*bsize*nchin)], 28, 28, 3*nchin, bsize))
+    Y0 = reshape(X[:, :, rand(1:60000, 3*bsize*nchout)], 28, 28, 3*nchout, bsize)
+    return Float32.(X0), Float32.(Y0)
 end
 
 function qi(grads, level=.95)
@@ -22,8 +24,6 @@ function qi(grads, level=.95)
     return mean(grads; dims=2)[:, 1] .- vec(qis), mean(grads; dims=2)[:, 1] .+ vec(qis)
 end
 
-nx = 32
-ny = 32
 n_in = 1
 n_out = 1
 
@@ -40,16 +40,10 @@ for ps=1:4
         n_bench = 5
         nw   = 3;
 
-        X, Y0 = getbatch(batchsize, n_in, n_out)
+        X, Y0 = getbatch_MNIST(batchsize, n_in, n_out)
         # Flux network
         C = Conv((nw, nw), 3*n_in=>3*n_out, identity;pad=1, stride=stride)
         w = C.weight
-
-        # XConv.initXConv(0, "TrueGrad")
-        # @btime g1 = gradient(w->.5*norm(conv($X, w;pad=1)- $Y0), $w);
-
-        # XConv.initXConv(ps, "EVGrad")
-        # @btime g2 = gradient(w->.5*norm(conv($X, w;pad=1)- $Y0), $w);
 
         XConv.initXConv(0, "TrueGrad")
         @time g1 = gradient(w->.5*norm(conv(X, w;pad=1)- Y0), w)[1]

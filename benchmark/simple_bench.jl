@@ -5,11 +5,11 @@ BLAS.set_num_threads(2)
 n_bench = 10
 BenchmarkTools.DEFAULT_PARAMETERS.samples = n_bench
 
-nx = 128
-ny = 128
+nx = 64
+ny = 64
 batchsize = 32
-n_in = 4
-n_out = 4
+n_in = 2
+n_out = 2
 stride = 1
 nw   = 3;
 
@@ -53,11 +53,11 @@ for (i, b)=enumerate(batches)
     angles[i, 4] = dot(g23, g1)/(norm(g23)*norm(g1))
 
     # Benchmark runtime
-    tf[i] = @belapsed ∇conv_filter($X, $Y, $cdims) samples=5
-    t1[i] = @belapsed grad_ev($X, $Y, 5, $nw, $stride) samples=5
-    t10[i] = @belapsed grad_ev($X, $Y, 10, $nw, $stride) samples=5
-    t50[i] = @belapsed grad_ev($X, $Y, 50, $nw, $stride) samples=5
-    t100[i] = @belapsed grad_ev($X, $Y, 100, $nw, $stride) samples=5
+    tf[i] = @elapsed ∇conv_filter($X, $Y, $cdims)
+    t1[i] = @elapsed grad_ev($X, $Y, 5, $nw, $stride)
+    t10[i] = @elapsed grad_ev($X, $Y, 10, $nw, $stride)
+    t50[i] = @elapsed grad_ev($X, $Y, 50, $nw, $stride)
+    t100[i] = @elapsed grad_ev($X, $Y, 100, $nw, $stride)s
 
     # Plot result
     axsl[i].plot(vec(g20)/norm(g20, Inf), label="LR(s=5)", "-r")
