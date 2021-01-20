@@ -53,11 +53,11 @@ for (i, b)=enumerate(batches)
     angles[i, 4] = dot(g23, g1)/(norm(g23)*norm(g1))
 
     # Benchmark runtime
-    tf[i] = @elapsed ∇conv_filter($X, $Y, $cdims)
-    t1[i] = @elapsed grad_ev($X, $Y, 5, $nw, $stride)
-    t10[i] = @elapsed grad_ev($X, $Y, 10, $nw, $stride)
-    t50[i] = @elapsed grad_ev($X, $Y, 50, $nw, $stride)
-    t100[i] = @elapsed grad_ev($X, $Y, 100, $nw, $stride)s
+    tf[i] = @belapsed ∇conv_filter($X, $Y, $cdims) samples=2
+    t1[i] = @belapsed grad_ev($X, $Y, 5, $nw, $stride) samples=2
+    t10[i] = @belapsed grad_ev($X, $Y, 10, $nw, $stride) samples=2
+    t50[i] = @belapsed grad_ev($X, $Y, 50, $nw, $stride) samples=2
+    t100[i] = @belapsed grad_ev($X, $Y, 100, $nw, $stride) samples=2
 
     # Plot result
     axsl[i].plot(vec(g20)/norm(g20, Inf), label="LR(s=5)", "-r")

@@ -11,13 +11,14 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     nxs, nys, ncho, batchsize = size(Y)
     dW = similar(X, nw*nw, nchi, ncho)
     fill!(dW, 0f0)
+
     # Get diagonals offsets
     offsets = vcat([((-div(nw,2):div(nw,2)) .+ i*nx) for i=-div(nw,2):div(nw,2)]...)
+
     # Is there enough probing vectors to process them in batches (currentl min(n, 16))
     be = div(n, 2^4)+1
     probe_bsize = min(2^4, n)
-    # Normalize by number of probing vectors and rescale by variance
-    scale = 12/(be*probe_bsize)
+
     # LR product temporaries
     Re =  similar(X, batchsize, probe_bsize)
     LRe = similar(X, div(nx*ny*nchi, stride*stride), probe_bsize)
@@ -32,7 +33,7 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     for k=1:be
         LR_probe_batched!(Xloc, Yloc, dW, Re, LRe, e, offsets, probe_bsize, nx*ny, LRees)
     end
-    scal!(dW, scale)
+    scal!(dW, 12/probe_bsize)
     return reshape(dW, nw, nw, nchi, ncho)[end:-1:1, end:-1:1, :, :]
 end
 
@@ -40,25 +41,28 @@ end
 function grad_ev(seed::UInt64, eX::AbstractArray{Float32, 2}, Y::AbstractArray{Float32, 4},
                  w::AbstractArray{Float32}, stride::Integer=1)
     n = _params[:p_size]
-    Random.seed!(seed)
     nw, _, nchi, ncho = size(w)
     nx, ny = size(Y)[1:2]
     batchsize, probe_bsize = size(eX)
     dW = similar(w, nw*nw, nchi, ncho)
     fill!(dW, 0f0)
+
     # Get diagonals offsets
     offsets = vcat([((-div(nw,2):div(nw,2)) .+ i*nx) for i=-div(nw,2):div(nw,2)]...)
-    # Normalize by number of probing vectors and rescale by variance
-    scale = 12/probe_bsize
+
     # LR product temporaries
     LRe = similar(Y, div(nx*ny*ncho, stride*stride), probe_bsize)
     LRees = similar(Y, ncho, nchi, probe_bsize)
     e = similar(Y, div(nx*ny*nchi, stride*stride), probe_bsize)
+    disprand!(e, seed)
+
     # reshape X and Y
     Yloc = reshape(Y, :, batchsize)
+
     # Probing
     LR_probe_batched!(Yloc, eX, dW, LRe, e, offsets, probe_bsize, nx*ny, LRees)
-    scal!(dW, scale)
+
+    scal!(dW, 12/probe_bsize)
     return reshape(dW, nw, nw, nchi, ncho)[end:-1:1, end:-1:1, :, :]
 end
 
@@ -75,8 +79,6 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, Re::AbstractArray{Float
                            batch::Integer, nn::Integer, LRees::AbstractArray{Float32, 3})
     se = maximum(offsets)
     eend = nn-se
-    # Probing vector
-    disprand!(e)
     # L*R'*e
     dispgemm!('N', 'N', 1f0, L, Re, 0f0, LRe)
     # e'*L*R'*e
