@@ -13,7 +13,7 @@ end
 
 function getbatch_MNIST(bsize, nchin, nchout;gaussian=false)
     X, _ = MNIST.traindata();
-    gaussian && (X0 = randn(Float32, 32, 32, nchin, bsize))
+    gaussian && (X0 = randn(Float32, 28, 28, nchin, bsize))
     !gaussian && (X0 = reshape(X[:, :, rand(1:60000, 3*bsize*nchin)], 28, 28, 3*nchin, bsize))
     Y0 = reshape(X[:, :, rand(1:60000, 3*bsize*nchout)], 28, 28, 3*nchout, bsize)
     return Float32.(X0), Float32.(Y0)
@@ -26,11 +26,13 @@ end
 
 n_in = 1
 n_out = 1
+nx = 28
+ny = 28
 
 diffgrad = Array{Any}(undef, 4, 6)
 
 close("all")
-for ps=1:4
+for ps=4:4
     fig, axs = subplots(3, 2, figsize=(10, 5), sharex=true, sharey=true)
     fig.suptitle("Gradient comparisons \n N=$(nx)x$(ny), nchi=$(3*n_in), ncho=$(3*n_out), prob_size=$(2^(ps+1))")
 
@@ -69,7 +71,7 @@ for ps=1:4
     lines, labels = fig.axes[end].get_legend_handles_labels()
     fig.legend(lines, labels, loc = "upper left")
     tight_layout()
-    savefig("./benchmark/var_grad$(ps)_CIFAR10-randX.png", bbox_inches="tight")
+    # savefig("./benchmark/var_grad$(ps)_CIFAR10-randX.png", bbox_inches="tight")
 end
 
 fig, axs = subplots(3, 2, figsize=(10, 5), sharex=true, sharey=true)
@@ -84,4 +86,4 @@ end
 lines, labels = fig.axes[end].get_legend_handles_labels()
 fig.legend(lines, labels, loc = "upper left")
 tight_layout()
-savefig("./benchmark/err_CIFAR10-randX.png", bbox_inches="tight")
+# savefig("./benchmark/err_CIFAR10-randX.png", bbox_inches="tight")

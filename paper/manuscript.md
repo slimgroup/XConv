@@ -6,6 +6,7 @@ author: |
 bibliography:
     - probeml.bib
 ---
+
 # refs
 
 Trace estimation as part of gaussian process:
@@ -39,7 +40,7 @@ roofline:
 # TODO
 
 - [] Add refs
-- [] Run gpu benchmark
+- [] Run gpu benchmark (maybe)
 - [] Cleanup theory
 - [] Redo some plots
 
@@ -70,13 +71,13 @@ These correlations can be reformulated as the extraction of the diagonal and off
     \mathbb{E}(\widetilde{\delta W[i,j]}) &= \delta W[i,j],
 ```
 
-where ``\tilde{X}, \tilde{\Delta}`` are ``X, \Delta`` vectorized along the image and channel dimensions and ``z`` are ``M`` random probing vectors drawn from ``\mathcal{U}(-.5, .5)``. The sum is normalized by ``c_0`` to compensate for the variance of the shifted uniform distribution. In theory, Radamaecher or ``\mathcal{N}(0, 1)`` distibutions for ``z`` would provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance. Our choice of distribution is still acceptable since the probing vector ``z`` satisifes:
+where ``\tilde{X}, \tilde{\Delta}`` are ``X, \Delta`` vectorized along the image and channel dimensions and ``z`` are ``M`` random probing vectors drawn from ``\mathcal{U}(-.5, .5)``. The sum is normalized by ``c_0`` to compensate for the variance of the shifted uniform distribution. In theory, Radamaecher or ``\mathcal{N}(0, 1)`` distibutions for ``z`` would provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance. Our choice of distribution is still acceptable since the probing vector ``z`` satisfies:
 
 ```math {#reqs}
   \mathbb{E}(z) = 0, \ \ \mathbb{E}(z^*z) = c_0
 ```
 
-therefore guarantiing the unbiasing of our estimate.
+and guaranties the unbiasing of our estimate.
 
 # Experiments
 
@@ -85,6 +86,7 @@ In order to validate our method and provide a more rigorous evalation of its cmp
 - **Accuracy**. We look at the accuracy of the obtained gradient against the true gradient for varying batch size, image size and number of probing vectors.
 - **Biasing**. We verify the the gradient is unbiased using the CIFAR10 dataset computing expectation of our gradient approximation against the true gradient.
 - **Computational performance**. In this case we consider the computational runtime for a single convolution layer gradient for varying image size, batch size and number of channel. This benchmark is performed on CPU and GPU.
+- **Training**. This last experiments verifies that our unbiased estimator can be used to train convolutional networks and leads to good accuracy. We show the training on the MNIST dataset and show that, for large batch size, our estimator provides comparable accuracy to conventional training.
 
 ## Accuracy and bias
 
@@ -130,9 +132,91 @@ We show on Figure #cpu-bench and #gpu-bench the benchmarked runtime to compute a
 
 These benchmarking results show that the proposed method leads to significant speedup (up to X10) in the computation of the gradient which would lead to drastic cost reduction for training a network.
 
-# Implementation
+## Training
+
+### MNIST
+
+- Tesla K80
+- Network is a standard convolution network:
+  - Conv(1=>16) -> MaxPool -> Conv(16=>32) -> MaxPool -> Conv(32=>32) - MaxPool -> flatten -> dense
+- 20 epochs`
+- ADAM with initial learning rate of ``.003``
+- MNSIST dataset for varying batch size and probing size
+
+### Table: {#MNIST-batch}
+|           | ``B=32``   | ``B=64``   | ``B=128``  | ``B=256``  | ``B=512``  | ``B=1024`` |
+|:---------:|:----------:|:----------:|:----------:|:----------:|:----------:|:----------:|
+| default   | ``0.9922`` | ``0.9930`` | ``0.9936`` | ``0.9923`` | ``0.9918`` | ``0.9884`` |
+| ``ps=2``  | ``0.9656`` | ``0.9474`` | ``0.9610`` | ``0.9584`` | ``0.9472`` | ``0.9394`` |
+| ``ps=4``  | ``0.9676`` | ``0.9693`` | ``0.9723`` | ``0.9634`` | ``0.9579`` | ``0.9498`` |
+| ``ps=8``  | ``0.9762`` | ``0.9721`` | ``0.9728`` | ``0.9762`` | ``0.9627`` | ``0.9625`` |
+| ``ps=16`` | ``0.9817`` | ``0.9831`` | ``0.9824`` | ``0.9830`` | ``0.9790`` | ``0.9735`` |
+| ``ps=32`` | ``0.9818`` | ``0.9862`` | ``0.9847`` | ``0.9838`` | ``0.9815`` | ``0.9789`` |
+| ``ps=64`` | ``0.9874`` | ``0.9829`` | ``0.9877`` | ``0.9848`` | ``0.9819`` | ``0.9803`` |
+
+: Training accuracy for varying batch sizes ``B`` and number of probing vectors ``ps`` on the MNIST dataset.
+
+### CIFAR10
+
+### Table: {#CIFAR10-batch}
+|           | ``B=32``   | ``B=64``   | ``B=128``  | ``B=256``  | ``B=512``  | ``B=1024`` |
+|:---------:|:----------:|:----------:|:----------:|:----------:|:----------:|:----------:|
+| default   | ``0.9924`` | ``0.9929`` | ``0.9929`` | ``0.9923`` | ``0.9918`` | ``0.9884`` |
+| ``ps=2``  | ``0.9581`` | ``0.9591`` | ``0.9580`` | ``0.9584`` | ``0.9472`` | ``0.9394`` |
+| ``ps=4``  | ``0.9563`` | ``0.9737`` | ``0.9723`` | ``0.9634`` | ``0.9579`` | ``0.9498`` |
+| ``ps=8``  | ``0.9687`` | ``0.9696`` | ``0.9728`` | ``0.9762`` | ``0.9627`` | ``0.9625`` |
+| ``ps=16`` | ``0.9862`` | ``0.9827`` | ``0.9824`` | ``0.9830`` | ``0.9790`` | ``0.9735`` |
+| ``ps=32`` | ``0.9801`` | ``0.9820`` | ``0.9847`` | ``0.9838`` | ``0.9815`` | ``0.9789`` |
+| ``ps=64`` | ``0.9851`` | ``0.9861`` | ``0.9877`` | ``0.9848`` | ``0.9819`` | ``0.9803`` |
+
+: Training accuracy for varying batch sizes ``B`` and number of probing vectors ``ps`` on the CIFAR10 dataset.
+
+# Implementation and code availability
 
 Our probing algorithm is implemented in julia using BLAS on CPU and CUBALS on GPU for the linear algebra computations. Code is on github. The interface is designed so that preexisting networks can be reused as is overloading `rrule` (see [ChainRulesCore](https://github.com/JuliaDiff/ChainRulesCore.jl)) to switch easily between the conventional true gradient ``\delta\text{conv\_filer}`` and our probing alogrithm.
+Our code and examples are available at [XConv](https://github.com/slimgroup/XConv.jl).
+
+## Compact memory forward-backward implementation
+
+In order to reduce the memory imprint of a convolutional layer, we implemented the proposed method with a compact in memory forward-backward design. This implementation is based on the symmetry of the probing in Equation #grad_ev that is equivalent to
+
+```math {#grad_ev_x}
+    \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z^* \tilde{X} \tilde{\Delta}^* z_{-i,-j} \\
+    \mathbb{E}(\widetilde{\delta W[i,j]}) &= \delta W[i,j].
+```
+
+In this symmetrized expression, the shift are applied to the backpropagated residual that allows us to compute ``X_e =z^* \tilde{X}`` during the forward propagation through the layer. This precomputation then only requires to store the matrix ``X_e`` of size ``B x p_s`` that leads to a memory reduction by a factor of ``\frac{N_x N_y C_i}{ps}``. For example, for a small image of size ``32x32`` and ``16`` input channels, this implementation leads to a mempry reduction by a factor of ``2^{14-p}`` for ``ps=2^p``. We then only need to allocate temporary memory for each layer for the probing vector that can be redrwan from a saved random generator seed. The forward-backward algorithm is summarized in Algorithm #ev_fwd_bck\.
+
+### Algorithm: {#ev_fwd_bck}
+| Forward pass:
+| 1. Convolution ``Y = C(X)``
+| 2. Draw a random seed ``s`` and probing vectors ``z``
+| 3. Compute and save ``X_e = z^* \tilde{X}``, save the seed ``s``
+| Backward pass:
+| 1. Redraw ``z`` from ``s``
+| 2. Compute ``\widetilde{\delta W[i,j]}`` according to Equation #grad_ev_x
+: Forward-backward unbiased estimator via trace estimation.
+
+This forward-backward implementation is trivial with [ChainRulesCore](https://github.com/JuliaDiff/ChainRulesCore.jl) that provides and abstraction for the definition of custome reverse automatic differentiation rules and illustrated in #rrule\.
+
+### Code: {#rrule}
+```
+  function ChainRulesCore.rrule(::typeof(NNlib.conv), X, w, cdim::DenseConvDims; kw...)
+      Y = conv(X, w, cdim)
+      eX, seed = probe_X(X)
+      function pullback(Δ)
+          Δ = colmajor(Δ)
+          return (
+              NO_FIELDS,
+              @thunk(∇conv_data(Δ, w, cdim, kw...)),
+              @thunk(grad_ev(seed, eX, Δ, w)), # Only needs eX
+              DoesNotExist(),
+          )
+      end
+      return Y, Δconv_std(X, w, cdim; kw...)
+  end
+```
+: Forward-backward unbiased estimator with `rrule`
 
 # Conclusions
 
