@@ -22,7 +22,7 @@ end
     lr::Float64 = 3e-3
     epochs::Int = 20
     batch_size = 128
-    savepath::String = "./" 
+    savepath::String = "./mnist_bsize/" 
 end
 
 # Bundle images together with labels and group into minibatchess
@@ -84,7 +84,7 @@ anynan(x) = any(isnan.(x))
 
 accuracy(x, y, model) = mean(onecold(cpu(model(x))) .== onecold(cpu(y)))
 
-function train(mode; kws...)
+function train(mode; ps=0, kws...)
     args = Args(; kws...)
 
     @info("Loading data set")
@@ -116,11 +116,12 @@ function train(mode; kws...)
     # printing out performance against the test set as we go.
     opt = ADAM(args.lr)
 	
-    @info("Beginning training loop...")
+    @info("Beginning training loop... with batch_size $(args.batch_size) and $(ps) probing vectors")
+    @show XConv._params
     best_acc = 0.0
     last_improvement = 0
     for epoch_idx in 1:args.epochs
-        XConv.initXConv(2^6, mode)
+        XConv.initXConv(ps, mode)
         # Train for a single epoch
         Flux.train!(loss, params(model), train_set, opt)
 	    
@@ -142,8 +143,8 @@ function train(mode; kws...)
 	
         # If this is the best accuracy we've seen so far, save the model out
         if acc >= best_acc
-            @info(" -> New best accuracy! Saving model out to mnist_conv_$(mode).bson")
-            BSON.@save joinpath(args.savepath, "mnist_conv_$(mode).bson") params=cpu.(params(model)) epoch_idx acc
+            #@info(" -> New best accuracy! Saving model out to mnist_conv_$(mode)_$(args.batch_size)_$(ps).bson")
+            BSON.@save joinpath(args.savepath, "mnist_conv_$(mode)_$(args.batch_size)_$(ps).bson") params=cpu.(params(model)) epoch_idx acc
             best_acc = acc
             last_improvement = epoch_idx
         end
@@ -151,7 +152,7 @@ function train(mode; kws...)
         # If we haven't seen improvement in 5 epochs, drop our learning rate:
         if epoch_idx - last_improvement >= 5 && opt.eta > 1e-6
             opt.eta /= 10.0
-            @warn(" -> Haven't improved in a while, dropping learning rate to $(opt.eta)!")
+            #@warn(" -> Haven't improved in a while, dropping learning rate to $(opt.eta)!")
    
             # After dropping learning rate, give it a few epochs to improve
             last_improvement = epoch_idx
@@ -165,7 +166,7 @@ function train(mode; kws...)
 end
 
 # Testing the model, from saved model
-function test(mode; kws...)
+function test(mode; ps=0, kws...)
     args = Args(; kws...)
     
     # Loading the test data
@@ -175,7 +176,7 @@ function test(mode; kws...)
     model = build_model(args)
     
     # Loading the saved parameters
-    BSON.@load joinpath(args.savepath, "mnist_conv_$(mode).bson") params
+    BSON.@load joinpath(args.savepath, "mnist_conv_$(mode)_$(args.batch_size)_$(ps).bson") params
     
     # Loading parameters onto the model
     Flux.loadparams!(model, params)
@@ -187,10 +188,16 @@ end
 
 cd(@__DIR__)
 
-#train("TrueGrad";epochs=1)
-#@time train("TrueGrad")
-#test("TrueGrad")
+b_sizes = [2^i for i=5:10]
+ps_sizes = [2^i for i=1:6]
 
-train("EVGrad"; epochs=1)
-@time train("EVGrad")
-test("EVGrad")
+for b in b_sizes
+    train("TrueGrad";epochs=1, batch_size=b)
+    @time train("TrueGrad"; batch_size=b)
+    test("TrueGrad";batch_size=b)
+    for ps in ps_sizes
+        train("EVGrad"; epochs=1, batch_size=b, ps=ps)
+        @time train("EVGrad"; batch_size=b, ps=ps)
+        test("EVGrad"; batch_size=b, ps=ps)
+    end
+end
