@@ -1,6 +1,15 @@
 using XConv, LinearAlgebra, Flux, PyPlot, BenchmarkTools
+using MLDatasets
 
-BLAS.set_num_threads(2)
+BLAS.set_num_threads(Sys.CPU_THREADS)
+
+function getbatch_CIFAR10(bsize, nchin, nchout; gaussian=false)
+    X, _ = CIFAR10.traindata();
+    gaussian && (X0 = randn(Float32, 32, 32, 3*nchin, bsize))
+    !gaussian && (X0 = reshape(X[:, :, :, rand(1:50000, bsize*nchin)], 32, 32, 3*nchin, bsize))
+    Y0 = reshape(X[:, :, :, rand(1:50000, bsize*nchout)], 32, 32, 3*nchout, bsize)
+    return Float32.(X0), Float32.(Y0)
+end
 
 n_bench = 10
 BenchmarkTools.DEFAULT_PARAMETERS.samples = n_bench
@@ -34,8 +43,9 @@ fig.suptitle("Conv layer gradient chi-$(n_in), cho-$(n_out)")
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    local X = randn(Float32, nx, ny, n_in, b)
-    local Y = C(X) - randn(Float32, nx, ny, n_out, b)
+    # local X = randn(Float32, nx, ny, n_in, b)
+    # local Y = C(X) - randn(Float32, nx, ny, n_out, b)
+    local X, Y =  getbatch_CIFAR10(b, n_in, n_out)
 
     cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 

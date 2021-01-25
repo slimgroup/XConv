@@ -29,11 +29,8 @@ end
 # rrule
 function ChainRulesCore.rrule(::typeof(NNlib.conv), X, w, cdim::DenseConvDims; kw...)
     Y = conv(X, w, cdim)
-    if _params[:mode] == EV
-        eX, seed = probe_X(X)
-        return Y, Δconv_ev(eX, seed, w, cdim;kw...)
-    end
-    return Y, Δconv_std(X, w, cdim; kw...)
+    back = _params[:mode] == EV ? Δconv_ev(X, w, cdim; kw...) : Δconv_std(X, w, cdim; kw...)
+    return Y, back
 end
 
 function Δconv_std(x, w, cdim; kw...)
@@ -49,7 +46,8 @@ function Δconv_std(x, w, cdim; kw...)
     return back
 end
 
-function Δconv_ev(Xc, seed, w, cdim;kw...)
+function Δconv_ev(X, w, cdim; kw...)
+    eX, seed = probe_X(X)
     function back(Δ)
         Δ = colmajor(Δ)
         return (
