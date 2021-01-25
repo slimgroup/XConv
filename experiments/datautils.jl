@@ -50,6 +50,7 @@ end
 function MNIST_testdata(;b_size=32, splitr_=.1)
     ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
     test_x, test_y = MNIST.testdata(Float32)
+    test_x = reshape(test_x, 28, 28, 1, :)
     test_y = onehotbatch(test_y, 0:9)
     
     return Flux.Data.DataLoader((test_x, test_y), batchsize=b_size)

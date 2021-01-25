@@ -20,8 +20,8 @@ include("./modelutils.jl")
 @with_kw mutable struct Args
     name::String = "MNIST"
     batchsize::Int = 128
-    η::Float64 = 3e-4
-    epochs::Int = 50
+    η::Float64 = 1e-3
+    epochs::Int = 20
     splitr_::Float64 = 0.1
     probe_size::Int = 8
     mode::String = "TrueGrad"
@@ -31,6 +31,7 @@ end
 function accuracy(test_data, m)
     correct, total = 0, 0
     for (x, y) in test_data
+        x, y = x |> device, y |> device
         correct += sum(onecold(cpu(m(x)), 0:9) .== onecold(cpu(y), 0:9))
         total += size(y, 2)
     end
@@ -46,7 +47,7 @@ function train(; kws...)
     XConv.initXConv(args.probe_size, args.mode)
 
     # Load the train, validation data 
-    train_data, validation_data = get_train_data(args)
+    train_data, val_data = get_train_data(args)
     test_data = get_test_data(args)
 
     @info("Constructing Model")	
@@ -54,12 +55,14 @@ function train(; kws...)
     m = build_model(args.name) |> device
     loss(x, y) = logitcrossentropy(m(x), y)
 
-    @info("Training $(args.name)")
-    args.mode= "TrueGrad" ? @info("Mode: $(args.mode)") : @info("Mode: $(args.mode), probing vectors: $(args.probe_size)")
+    @info("Training $(args.name) with batch size $(args.batchsize)")
+    args.mode == "TrueGrad" ? @info("Mode: $(args.mode)") : @info("Mode: $(args.mode), probing vectors: $(args.probe_size)")
     lhist = []
+    
     # Defining the optimizer
     opt = ADAM(args.η)
     ps = Flux.params(m)
+    
     # Starting to train models
     for epoch in 1:args.epochs
         local l
@@ -80,29 +83,25 @@ function train(; kws...)
             validation_loss += loss(x, y)
         end
         validation_loss /= length(val_data)
-        @info "Epoch $epoch validation loss = $(validation_loss)"
+        acc = accuracy(val_data, m)
+        @info "Epoch $epoch validation loss = $(validation_loss), accuracy = $(acc)"
     end
-
-    @show accuracy(test_data, m)
-
-    BSON.@save joinpath(args.savepath, "$(args.name)_conv_$(args.mode)_$(args.batch_size)_$(args.probe_size).bson") params=cpu.(params(m)) acc lhist
+    acc = accuracy(test_data, m)
+    BSON.@save joinpath(args.savepath, "$(args.name)_conv_$(args.mode)_$(args.batchsize)_$(args.probe_size).bson") params=cpu.(params(m)) acc lhist
 
 end
 
-train(;mode="TrueGrad")
 
-# datasets = ["MNIST", "CIFAR10"]
+datasets = ["MNIST", "CIFAR10"]
 
-# b_sizes = [2^i for i=5:10]
-# ps_sizes = [2^i for i=1:6]
+b_sizes = [2^i for i=5:10]
+ps_sizes = [2^i for i=1:6]
 
-# for d in datasets
-#     for b in b_sizes
-#         train(;mode="TrueGrad", epochs=1, batch_size=b, name=d)
-#         @time train(;mode="TrueGrad", batch_size=b, name=d)
-#         for ps in ps_sizes
-#             train(;mode="EVGrad", epochs=1, batch_size=b, probe_size=ps, name=d)
-#             @time train(;mode="EVGrad", batch_size=b, probe_size=ps, name=d)
-#         end
-#     end
-# end
+for d in datasets
+    for b in b_sizes
+        @time train(;mode="TrueGrad", batchsize=b, name=d)
+        for ps in ps_sizes
+            @time train(;mode="EVGrad", batchsize=b, probe_size=ps, name=d)
+        end
+    end
+end
