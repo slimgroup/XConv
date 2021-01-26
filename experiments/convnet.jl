@@ -20,7 +20,7 @@ include("./modelutils.jl")
 @with_kw mutable struct Args
     name::String = "MNIST"
     batchsize::Int = 128
-    η::Float64 = 1e-3
+    η::Float64 = 3e-3
     epochs::Int = 20
     splitr_::Float64 = 0.1
     probe_size::Int = 8
@@ -43,9 +43,6 @@ function train(; kws...)
     # Initialize the hyperparameters
     args = Args(; kws...)
 
-    # Initialize gradient mode
-    XConv.initXConv(args.probe_size, args.mode)
-
     # Load the train, validation data 
     train_data, val_data = get_train_data(args)
     test_data = get_test_data(args)
@@ -62,9 +59,12 @@ function train(; kws...)
     # Defining the optimizer
     opt = ADAM(args.η)
     ps = Flux.params(m)
-    
+
+    # Initialize gradient mode
+    XConv.initXConv(args.probe_size, args.mode)
     # Starting to train models
     for epoch in 1:args.epochs
+        Base.flush(stdout)
         local l
         for (x, y) in train_data
             x, y = x |> device, y |> device
@@ -94,14 +94,16 @@ end
 
 datasets = ["MNIST", "CIFAR10"]
 
-b_sizes = [2^i for i=5:10]
+b_sizes = [2^i for i=5:9]
 ps_sizes = [2^i for i=1:6]
 
 for d in datasets
     for b in b_sizes
-        @time train(;mode="TrueGrad", batchsize=b, name=d)
+        t1 = @elapsed train(;epochs=20,mode="TrueGrad", batchsize=b, name=d)
+        @show t1
         for ps in ps_sizes
-            @time train(;mode="EVGrad", batchsize=b, probe_size=ps, name=d)
+            t1 = @elapsed train(;η=5e-3, epochs=20,mode="EVGrad", batchsize=b, probe_size=ps, name=d)
+            @show t1
         end
     end
 end
