@@ -2,36 +2,37 @@ using Flux, XConv, BSON, IterTools
 using Flux: onecold, logitcrossentropy, @epochs
 using CUDA
 using Parameters: @with_kw
-using ProgressMeter
+using Distributed
 
-datasets = ["MNIST", "CIFAR10"]
-name = length(ARGS) > 0 ? (ARGS[1] in datasets ? ARGS[1] : "MNIST") : "MNIST"
-@show name
+addprocs(length(devices()))
+@everywhere using CUDA, BSON, XConv, Flux
+@everywhere using Flux: onecold, logitcrossentropy, @epochs
+@everywhere using Parameters: @with_kw
 
-CUDA.unsafe_free!(h::Flux.OneHotMatrix) = CUDA.unsafe_free!(h.data)
+@everywhere CUDA.unsafe_free!(h::Flux.OneHotMatrix) = CUDA.unsafe_free!(h.data)
 
 cd(dirname(@__FILE__))
 
+wp = default_worker_pool()
+
 if CUDA.has_cuda()
-    device = gpu
-    CUDA.allowscalar(false)
-    iterator = CuIterator
+    @everywhere device = gpu
+    @everywhere CUDA.allowscalar(false)
+    @everywhere iterator = CuIterator
     @info "Training on GPU"
 else
-    iterator = ()
-    device = cpu
+    @everywhere iterator = ()
+    @everywhere device = cpu
     @info "Training on CPU"
 end
 
-include("./datautils.jl")
-include("./modelutils.jl")
+@everywhere include("./datautils.jl")
+@everywhere include("./modelutils.jl")
 
-@with_kw mutable struct Args
+@everywhere @with_kw mutable struct Args
     name::String = "MNIST"
     batchsize::Int = 128
     η::Float64 = 3e-3
-    η_fact::Float64 = 2
-    progress_fact::Float64 = .001
     epochs::Int = 20
     splitr_::Float64 = 0.1
     probe_size::Int = 8
@@ -39,7 +40,7 @@ include("./modelutils.jl")
     savepath::String = "./$(name)_bench"
 end
 
-function accuracy(test_data, m)
+@everywhere function accuracy(test_data, m)
     correct, total = 0, 0
     for (x, y) in iterator(test_data)
         correct += sum(onecold(cpu(m(x)), 0:9) .== onecold(cpu(y), 0:9))
@@ -49,10 +50,10 @@ function accuracy(test_data, m)
     test_accuracy
 end
 
-augment(x) = x .+ device(0.1f0*randn(eltype(x), size(x)))
-filename(args) = joinpath(args.savepath, "$(args.name)_conv_$(args.mode)_$(args.batchsize)_$(args.probe_size)_$(args.η).bson")
+@everywhere augment(x) = x .+ device(0.1f0*randn(eltype(x), size(x)))
+@everywhere filename(args) = joinpath(args.savepath, "$(args.name)_conv_$(args.mode)_$(args.batchsize)_$(args.probe_size).bson")
 
-function train(; kws...)
+@everywhere function train(; kws...)
     # Initialize the hyperparameters
     args = Args(; kws...)
     isfile(filename(args)) && return
@@ -66,6 +67,7 @@ function train(; kws...)
     loss(x, y) = logitcrossentropy(m(x), y)
 
     @info("Training $(args.name) with batch size $(args.batchsize)")
+    args.mode == "TrueGrad" ? @info("Mode: $(args.mode)") : @info("Mode: $(args.mode), probing vectors: $(args.probe_size)")
     lhist = []
     
     # Defining the optimizer
@@ -75,12 +77,9 @@ function train(; kws...)
     # Initialize gradient mode
     XConv.initXConv(args.probe_size, args.mode)
     # Starting to train models
-    p = Progress(length(train_data) * args.epochs)
     for epoch in 1:args.epochs
         Base.flush(Base.stdout)
-        local l, acc
-	acc = accuracy(val_data, m)
-	n = length(train_data)
+        local l
         for (x, y) in iterator(train_data)
             gs = Flux.gradient(ps) do 
                 l = loss(x, y)
@@ -88,7 +87,6 @@ function train(; kws...)
             end
             Flux.update!(opt, ps, gs)
             push!(lhist, l)
-	    ProgressMeter.next!(p; showvalues = [(:loss, l), (:epoch, epoch), (:Mode, args.mode), (:ps, args.probe_size), (:η, args.η), (:accuracy, acc)])
         end
 
         validation_loss = 0f0
@@ -96,26 +94,36 @@ function train(; kws...)
             validation_loss += loss(x, y)
         end
         validation_loss /= length(val_data)
-        acc_loc = accuracy(val_data, m)
-	(acc_loc/acc - 1) < args.progress_fact && (args.η /= args.η_fact)
+        acc = accuracy(val_data, m)
+        @info "Epoch $epoch validation with ($(args.mode), $(args.probe_size)) loss = $(validation_loss), accuracy = $(acc)"
     end
     acc = accuracy(test_data, m)
     BSON.@save filename(args) params=cpu.(params(m)) acc lhist
     GC.gc()
 end
 
-#b_sizes = [2^i for i=5:10]
-#ps_sizes = [0..., [2^i for i=1:6]...]
 
-#for d in datasets
-#    for b in b_sizes
-#        for ps in ps_sizes
-#	    η = d == "CIFAR10" ? 3e-4 : 3e-3
-#            train(;η=η, epochs=20,batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
-#        end
-#    end
-#end
 
-for lr in Float32.((.1:.1:10)*1e-3)
-    train(;η=lr, epochs=10,batchsize=128, probe_size=16, name=name, mode="EVGrad", savepath="./MNIST_lr")
+datasets = ["MNIST", "CIFAR10"]
+
+b_sizes = [2^i for i=5:10]
+ps_sizes = [0..., [2^i for i=1:6]...]
+
+# assign devices
+asyncmap((zip(workers(), devices()))) do (p, d)
+    remotecall_wait(p) do
+        @info "Worker $p uses $d"
+        device!(d)
+    end
+end
+
+pw = default_worker_pool()
+
+@sync for d in datasets
+    for b in b_sizes
+        for ps in ps_sizes
+	    η = d == "CIFAR10" ? 3e-4 : 3e-3
+            @async remotecall_fetch(train, pw;η=η, epochs=20,batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
+        end
+    end
 end
