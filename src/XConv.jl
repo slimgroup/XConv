@@ -3,7 +3,7 @@ module XConv
 # Dependencies
 using Random
 using LinearAlgebra
-using CUDA
+using CUDA, GPUArrays
 using NNlib
 using ChainRulesCore
 

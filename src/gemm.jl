@@ -1,6 +1,6 @@
 # scal!
-scal!(a::Array{T}, s) where T = LinearAlgebra.BLAS.scal!(length(a), T(s), a, 1)
-scal!(a::CuArray{T}, s) where T = CUBLAS.scal!(length(a), T(s), a)
+scal!(a::Array{T}, p_size) where T = LinearAlgebra.BLAS.scal!(length(a), T(12/p_size), a, 1)
+scal!(a::CuArray{T}, p_size) where T = CUBLAS.scal!(length(a), T(1/p_size), a)
 
 # Matvec
 dispgemm!(tA::Char, α::Float32, A::AbstractArray{Float32, 2}, b::AbstractArray{Float32, 1}, β::Float32, c::Array{Float32, 1}) = LinearAlgebra.BLAS.gemv!(tA, α, A, b, β, c)

@@ -75,7 +75,7 @@ function train(; kws...)
     # Initialize gradient mode
     XConv.initXConv(args.probe_size, args.mode)
     # Starting to train models
-    #p = Progress(length(train_data) * args.epochs)
+    p = Progress(length(train_data) * args.epochs)
     for epoch in 1:args.epochs
         Base.flush(Base.stdout)
         local l, acc
@@ -88,7 +88,7 @@ function train(; kws...)
             end
             Flux.update!(opt, ps, gs)
             push!(lhist, l)
-	    #ProgressMeter.next!(p; showvalues = [(:loss, l), (:epoch, epoch), (:Mode, args.mode), (:ps, args.probe_size), (:η, args.η), (:accuracy, acc)])
+	    ProgressMeter.next!(p; showvalues = [(:loss, l), (:epoch, epoch), (:Mode, args.mode), (:ps, args.probe_size), (:η, args.η), (:accuracy, acc)])
         end
 
         validation_loss = 0f0
@@ -98,7 +98,7 @@ function train(; kws...)
         validation_loss /= length(val_data)
         acc_loc = accuracy(val_data, m)
 	(acc_loc/acc - 1) < args.progress_fact && (args.η *= args.η_fact)
-        @info "Epoch $epoch validation with ($(args.mode), $(args.probe_size)) loss = $(validation_loss), accuracy = $(acc_loc)"
+        #@info "Epoch $epoch validation with ($(args.mode), $(args.probe_size)) loss = $(validation_loss), accuracy = $(acc_loc)"
     end
     acc = accuracy(test_data, m)
     BSON.@save filename(args) params=cpu.(params(m)) acc lhist
@@ -111,7 +111,7 @@ ps_sizes = [0..., [2^i for i=1:6]...]
 for d in datasets
     for b in b_sizes
         for ps in ps_sizes
-	    η = d == "CIFAR10" ? 3e-4 : 3e-3
+	    η = (d == "CIFAR10" && ps == 0) ? 3e-4 : 3e-3
             train(;η=η, epochs=20,batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
         end
     end

@@ -33,12 +33,13 @@ function grad_ev(X::AbstractArray{Float32, 4}, Y::AbstractArray{Float32, 4},
     for k=1:be
         LR_probe_batched!(Xloc, Yloc, dW, Re, LRe, e, offsets, probe_bsize, nx*ny, LRees)
     end
-    scal!(dW, 12/probe_bsize)
+    scal!(dW, probe_bsize)
     return reshape(dW, nw, nw, nchi, ncho)[end:-1:1, end:-1:1, :, :]
 end
 
 
-function grad_ev(seed::UInt64, eX::AbstractArray{Float32, 2}, Y::AbstractArray{Float32, 4},
+function grad_ev(seeding::Union{UInt64, Tuple{GPUArrays.RNG,UInt64}}, eX::AbstractArray{Float32, 2},
+		 Y::AbstractArray{Float32, 4},
                  w::AbstractArray{Float32}, stride::Integer=1)
     n = _params[:p_size]
     nw, _, nchi, ncho = size(w)
@@ -54,7 +55,7 @@ function grad_ev(seed::UInt64, eX::AbstractArray{Float32, 2}, Y::AbstractArray{F
     LRe = similar(Y, div(nx*ny*ncho, stride*stride), probe_bsize)
     LRees = similar(Y, nchi, ncho, probe_bsize)
     e = similar(Y, div(nx*ny*nchi, stride*stride), probe_bsize)
-    disprand!(e, seed)
+    disprand!(e, seeding)
     
     # reshape X and Y
     Yloc = reshape(Y, :, batchsize)
@@ -62,7 +63,7 @@ function grad_ev(seed::UInt64, eX::AbstractArray{Float32, 2}, Y::AbstractArray{F
     # Probing
     LR_probe_batched!(Yloc, eX, dW, LRe, e, offsets, probe_bsize, nx*ny, LRees)
 
-    scal!(dW, 12/probe_bsize)
+    scal!(dW, probe_bsize)
     return reshape(dW, nw, nw, nchi, ncho)[end:-1:1, end:-1:1, :, :]
 end
 
@@ -120,19 +121,22 @@ end
 # rand
 disprand!(e::Array{Float32}, seed::UInt64) = (Random.seed!(seed);disprand!(e))
 disprand!(e::AbstractArray{Float32}) = (rand!(e);broadcast!(-, e, e, .5f0))
-disprand!(e::CuArray{Float32}, seed::UInt64) = (CUDA.seed!(seed);disprand!(e))
+disprand!(e::CuArray{Float32}, seeding::Tuple{GPUArrays.RNG, UInt64}) = (Random.seed!(seeding...);randn!(seeding[1], e))
 
 # Utilities
 function probe_X(X::AbstractArray{Float32, 4})
-    seed = rand(UInt64)
-    e = probe_vec(seed, X)
+    seeding = make_rng(X)
+    e = probe_vec(seeding, X)
     eX = similar(X, size(X, 4), _params[:p_size])
     dispgemm!('T', 'N', 1f0, reshape(X, :,  size(X, 4)), e, 0f0, eX)
-    return seed, eX
+    return seeding, eX
 end
 
-function probe_vec(seed::UInt64, X::AbstractArray{Float32, 4})
+function probe_vec(seeding, X::AbstractArray{Float32, 4})
     e = similar(X, prod(size(X)[1:3]), _params[:p_size])
-    disprand!(e, seed)
+    disprand!(e, seeding)
     return e
 end
+
+@inline make_rng(::CuArray) = (GPUArrays.default_rng(CuArray), rand(UInt64))
+@inline make_rng(::Array) = rand(UInt64)
