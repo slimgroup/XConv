@@ -30,7 +30,7 @@ include("./modelutils.jl")
     name::String = "MNIST"
     batchsize::Int = 128
     η::Float64 = 3e-3
-    η_fact::Float64 = 2
+    η_fact::Float64 = .9
     progress_fact::Float64 = .001
     epochs::Int = 20
     splitr_::Float64 = 0.1
@@ -50,7 +50,7 @@ function accuracy(test_data, m)
 end
 
 augment(x) = x .+ device(0.1f0*randn(eltype(x), size(x)))
-filename(args) = joinpath(args.savepath, "$(args.name)_conv_$(args.mode)_$(args.batchsize)_$(args.probe_size)_$(args.η).bson")
+filename(args) = joinpath(args.savepath, "$(args.name)_conv_$(args.mode)_$(args.batchsize)_$(args.probe_size).bson")
 
 function train(; kws...)
     # Initialize the hyperparameters
@@ -75,7 +75,7 @@ function train(; kws...)
     # Initialize gradient mode
     XConv.initXConv(args.probe_size, args.mode)
     # Starting to train models
-    p = Progress(length(train_data) * args.epochs)
+    #p = Progress(length(train_data) * args.epochs)
     for epoch in 1:args.epochs
         Base.flush(Base.stdout)
         local l, acc
@@ -88,7 +88,7 @@ function train(; kws...)
             end
             Flux.update!(opt, ps, gs)
             push!(lhist, l)
-	    ProgressMeter.next!(p; showvalues = [(:loss, l), (:epoch, epoch), (:Mode, args.mode), (:ps, args.probe_size), (:η, args.η), (:accuracy, acc)])
+	    #ProgressMeter.next!(p; showvalues = [(:loss, l), (:epoch, epoch), (:Mode, args.mode), (:ps, args.probe_size), (:η, args.η), (:accuracy, acc)])
         end
 
         validation_loss = 0f0
@@ -97,25 +97,26 @@ function train(; kws...)
         end
         validation_loss /= length(val_data)
         acc_loc = accuracy(val_data, m)
-	(acc_loc/acc - 1) < args.progress_fact && (args.η /= args.η_fact)
+	(acc_loc/acc - 1) < args.progress_fact && (args.η *= args.η_fact)
+        @info "Epoch $epoch validation with ($(args.mode), $(args.probe_size)) loss = $(validation_loss), accuracy = $(acc_loc)"
     end
     acc = accuracy(test_data, m)
     BSON.@save filename(args) params=cpu.(params(m)) acc lhist
     GC.gc()
 end
 
-#b_sizes = [2^i for i=5:10]
-#ps_sizes = [0..., [2^i for i=1:6]...]
+b_sizes = [2^i for i=5:10]
+ps_sizes = [0..., [2^i for i=1:6]...]
 
-#for d in datasets
-#    for b in b_sizes
-#        for ps in ps_sizes
-#	    η = d == "CIFAR10" ? 3e-4 : 3e-3
-#            train(;η=η, epochs=20,batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
-#        end
-#    end
-#end
-
-for lr in Float32.((.1:.1:10)*1e-3)
-    train(;η=lr, epochs=10,batchsize=128, probe_size=16, name=name, mode="EVGrad", savepath="./MNIST_lr")
+for d in datasets
+    for b in b_sizes
+        for ps in ps_sizes
+	    η = d == "CIFAR10" ? 3e-4 : 3e-3
+            train(;η=η, epochs=20,batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
+        end
+    end
 end
+
+#for lr in Float32.((.1:.1:10)*1e-3)
+#    train(;η=lr, epochs=10,batchsize=128, probe_size=8, name=name, mode="EVGrad", savepath="./MNIST_lr")
+#end

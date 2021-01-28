@@ -52,10 +52,10 @@ function grad_ev(seed::UInt64, eX::AbstractArray{Float32, 2}, Y::AbstractArray{F
 
     # LR product temporaries
     LRe = similar(Y, div(nx*ny*ncho, stride*stride), probe_bsize)
-    LRees = similar(Y, ncho, nchi, probe_bsize)
+    LRees = similar(Y, nchi, ncho, probe_bsize)
     e = similar(Y, div(nx*ny*nchi, stride*stride), probe_bsize)
     disprand!(e, seed)
-
+    
     # reshape X and Y
     Yloc = reshape(Y, :, batchsize)
 
@@ -87,9 +87,9 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, Re::AbstractArray{Float
     @inbounds for i=1:length(offsets)
         # Reshape single probe as `nn x nci` and do Mat-vec with es dW for all input channels and sum
         ev = view(ee, se+1+offsets[i]:eend+offsets[i], :, :)
-        Bgemm!('T', 'N', 1f0, Lree, ev, 0f0, LRees)
+        Bgemm!('T', 'N', 1f0, ev, Lree, 0f0, LRees)
         cumsum!(LRees, LRees, dims=3)
-        @views broadcast!(+, dW[i, :, :], dW[i, :, :], LRees[:, :, batch]')
+        @views broadcast!(+, dW[i, :, :], dW[i, :, :], LRees[:, :, batch])
     end
 end
 
@@ -118,12 +118,9 @@ function LR_probe_batched!(L::AbstractArray{Float32, 2}, R::AbstractArray{Float3
 end
 
 # rand
-for N=1:3
-    @eval begin
-        disprand!(e::AbstractArray{Float32, $N}, seed::UInt64) = (Random.seed!(seed);disprand!(e))
-        disprand!(e::AbstractArray{Float32, $N}) = (rand!(e);broadcast!(-, e, e, .5f0))
-    end
-end
+disprand!(e::Array{Float32}, seed::UInt64) = (Random.seed!(seed);disprand!(e))
+disprand!(e::AbstractArray{Float32}) = (rand!(e);broadcast!(-, e, e, .5f0))
+disprand!(e::CuArray{Float32}, seed::UInt64) = (CUDA.seed!(seed);disprand!(e))
 
 # Utilities
 function probe_X(X::AbstractArray{Float32, 4})
@@ -131,7 +128,7 @@ function probe_X(X::AbstractArray{Float32, 4})
     e = probe_vec(seed, X)
     eX = similar(X, size(X, 4), _params[:p_size])
     dispgemm!('T', 'N', 1f0, reshape(X, :,  size(X, 4)), e, 0f0, eX)
-    return eX, seed
+    return seed, eX
 end
 
 function probe_vec(seed::UInt64, X::AbstractArray{Float32, 4})

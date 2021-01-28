@@ -47,7 +47,7 @@ function Δconv_std(x, w, cdim; kw...)
 end
 
 function Δconv_ev(X, w, cdim; kw...)
-    eX, seed = probe_X(X)
+    seed, eX = probe_X(X)
     function back(Δ)
         Δ = colmajor(Δ)
         return (
