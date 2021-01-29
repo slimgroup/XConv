@@ -64,6 +64,7 @@ function grad_ev(seeding::Union{UInt64, Tuple{GPUArrays.RNG,UInt64}}, eX::Abstra
     LR_probe_batched!(Yloc, eX, dW, LRe, e, offsets, probe_bsize, nx*ny, LRees)
 
     scal!(dW, probe_bsize)
+    any(isnan.(dW)) && scal!(disprand!(dW), 1f3)
     return reshape(dW, nw, nw, nchi, ncho)[end:-1:1, end:-1:1, :, :]
 end
 
@@ -121,7 +122,7 @@ end
 # rand
 disprand!(e::Array{Float32}, seed::UInt64) = (Random.seed!(seed);disprand!(e))
 disprand!(e::AbstractArray{Float32}) = (rand!(e);broadcast!(-, e, e, .5f0))
-disprand!(e::CuArray{Float32}, seeding::Tuple{GPUArrays.RNG, UInt64}) = (Random.seed!(seeding...);randn!(seeding[1], e))
+disprand!(e::CuArray{Float32}, seeding::Tuple{GPUArrays.RNG, UInt64}) = (Random.seed!(seeding...);randn!(seeding[1], e);)
 
 # Utilities
 function probe_X(X::AbstractArray{Float32, 4})

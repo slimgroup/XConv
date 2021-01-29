@@ -52,10 +52,17 @@ end
 augment(x) = x .+ device(0.1f0*randn(eltype(x), size(x)))
 filename(args) = joinpath(args.savepath, "$(args.name)_conv_$(args.mode)_$(args.batchsize)_$(args.probe_size).bson")
 
+function check(fname)
+    isfile(fname) ? (BSON.@load fname acc) : (return false)
+    acc < .1 ? rm(fname) : (return true)
+    false
+end
+
 function train(; kws...)
     # Initialize the hyperparameters
     args = Args(; kws...)
-    isfile(filename(args)) && return
+    check(filename(args)) && return
+
     # Load the train, validation data 
     train_data, val_data = get_train_data(args)
     test_data = get_test_data(args)
@@ -76,6 +83,7 @@ function train(; kws...)
     XConv.initXConv(args.probe_size, args.mode)
     # Starting to train models
     p = Progress(length(train_data) * args.epochs)
+    best = 0
     for epoch in 1:args.epochs
         Base.flush(Base.stdout)
         local l, acc
@@ -89,7 +97,7 @@ function train(; kws...)
             Flux.update!(opt, ps, gs)
             push!(lhist, l)
 	    ProgressMeter.next!(p; showvalues = [(:loss, l), (:epoch, epoch), (:Mode, args.mode), (:ps, args.probe_size), (:η, args.η), (:accuracy, acc)])
-        end
+	end
 
         validation_loss = 0f0
         for (x, y) in iterator(val_data)
@@ -98,21 +106,21 @@ function train(; kws...)
         validation_loss /= length(val_data)
         acc_loc = accuracy(val_data, m)
 	(acc_loc/acc - 1) < args.progress_fact && (args.η *= args.η_fact)
-        #@info "Epoch $epoch validation with ($(args.mode), $(args.probe_size)) loss = $(validation_loss), accuracy = $(acc_loc)"
+        @info "Epoch $epoch validation with $(XConv._params) loss = $(validation_loss), accuracy = $(acc_loc)"
     end
     acc = accuracy(test_data, m)
     BSON.@save filename(args) params=cpu.(params(m)) acc lhist
     GC.gc()
 end
 
-b_sizes = [2^i for i=5:10]
-ps_sizes = [0..., [2^i for i=1:6]...]
+b_sizes = [2^i for i=5:11]
+ps_sizes = [0..., [2^i for i=1:7]...]
 
 for d in datasets
     for b in b_sizes
         for ps in ps_sizes
-	    η = (d == "CIFAR10" && ps == 0) ? 3e-4 : 3e-3
-            train(;η=η, epochs=20,batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
+	    η = d == "CIFAR10" ? 3e-4 : 3e-3
+            train(;η=η, epochs=10+2*log2(b),batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
         end
     end
 end
