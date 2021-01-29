@@ -1,15 +1,24 @@
 using XConv, LinearAlgebra, Flux, PyPlot, BenchmarkTools
+using MLDatasets
 
-BLAS.set_num_threads(2)
+BLAS.set_num_threads(Sys.CPU_THREADS)
+
+function getbatch_CIFAR10(bsize, nchin, nchout; gaussian=false)
+    X, _ = CIFAR10.traindata();
+    gaussian && (X0 = randn(Float32, 32, 32, 3*nchin, bsize))
+    !gaussian && (X0 = reshape(X[:, :, :, rand(1:50000, bsize*nchin)], 32, 32, 3*nchin, bsize))
+    Y0 = reshape(X[:, :, :, rand(1:50000, bsize*nchout)], 32, 32, 3*nchout, bsize)
+    return Float32.(X0), Float32.(Y0)
+end
 
 n_bench = 10
 BenchmarkTools.DEFAULT_PARAMETERS.samples = n_bench
 
-nx = 128
-ny = 128
+nx = 64
+ny = 64
 batchsize = 32
-n_in = 4
-n_out = 4
+n_in = 2
+n_out = 2
 stride = 1
 nw   = 3;
 
@@ -34,8 +43,9 @@ fig.suptitle("Conv layer gradient chi-$(n_in), cho-$(n_out)")
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    local X = randn(Float32, nx, ny, n_in, b)
-    local Y = C(X) - randn(Float32, nx, ny, n_out, b)
+    # local X = randn(Float32, nx, ny, n_in, b)
+    # local Y = C(X) - randn(Float32, nx, ny, n_out, b)
+    local X, Y =  getbatch_CIFAR10(b, n_in, n_out)
 
     cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 
@@ -53,11 +63,11 @@ for (i, b)=enumerate(batches)
     angles[i, 4] = dot(g23, g1)/(norm(g23)*norm(g1))
 
     # Benchmark runtime
-    tf[i] = @belapsed ∇conv_filter($X, $Y, $cdims) samples=5
-    t1[i] = @belapsed grad_ev($X, $Y, 5, $nw, $stride) samples=5
-    t10[i] = @belapsed grad_ev($X, $Y, 10, $nw, $stride) samples=5
-    t50[i] = @belapsed grad_ev($X, $Y, 50, $nw, $stride) samples=5
-    t100[i] = @belapsed grad_ev($X, $Y, 100, $nw, $stride) samples=5
+    tf[i] = @belapsed ∇conv_filter($X, $Y, $cdims) samples=2
+    t1[i] = @belapsed grad_ev($X, $Y, 5, $nw, $stride) samples=2
+    t10[i] = @belapsed grad_ev($X, $Y, 10, $nw, $stride) samples=2
+    t50[i] = @belapsed grad_ev($X, $Y, 50, $nw, $stride) samples=2
+    t100[i] = @belapsed grad_ev($X, $Y, 100, $nw, $stride) samples=2
 
     # Plot result
     axsl[i].plot(vec(g20)/norm(g20, Inf), label="LR(s=5)", "-r")

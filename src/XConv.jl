@@ -3,9 +3,11 @@ module XConv
 # Dependencies
 using Random
 using LinearAlgebra
-using CUDA
+using CUDA, GPUArrays
 using NNlib
 using ChainRulesCore
+
+import NNlib: colmajor
 
 export grad_ev, initXConv
 
@@ -24,24 +26,38 @@ function initXConv(probe_size::Integer, mode::String)
     _params[:p_size] = probe_size
 end
 
-# Helper functions for rrule
-weightsize(::DenseConvDims{N,K,C_in,C_out,S,P,D,F}) where {N,K,C_in,C_out,S,P,D,F} = K[1]
+# rrule
+function ChainRulesCore.rrule(::typeof(NNlib.conv), X, w, cdim::DenseConvDims; kw...)
+    Y = conv(X, w, cdim)
+    back = _params[:mode] == EV ? Δconv_ev(X, w, cdim; kw...) : Δconv_std(X, w, cdim; kw...)
+    return Y, back
+end
 
-colmajor(x) = (NNlib.is_strided(x) && Base.stride(x, 1) == 1) ? x : collect(x)
-
-# Little wrapper to have our own conv
-for N=3:5
-    for AT in [Array, CuArray]
-        @eval begin
-            function NNlib.∇conv_filter(x::$(AT){xT, $N}, dy::$(AT){wT, $N},
-                                        cdims::ConvDims; kw...) where {xT, wT}
-                dy = colmajor(dy)
-                _params[:mode] == EV && return grad_ev(x, dy, _params[:p_size], weightsize(cdims))
-                return invoke(NNlib.∇conv_filter,  Tuple{AbstractArray{Float32, 4}, AbstractArray{Float32, 4}, ConvDims},
-                              x, dy, cdims; kw...)
-            end
-        end
+function Δconv_std(x, w, cdim; kw...)
+    function back(Δ)
+        Δ = colmajor(Δ)
+        return (
+            NO_FIELDS,
+            @thunk(∇conv_data(Δ, w, cdim, kw...)),
+            @thunk(∇conv_filter(x, Δ, cdim, kw...)),
+            DoesNotExist(),
+        )
     end
+    return back
+end
+
+function Δconv_ev(X, w, cdim; kw...)
+    seed, eX = probe_X(X)
+    function back(Δ)
+        Δ = colmajor(Δ)
+        return (
+            NO_FIELDS,
+            @thunk(∇conv_data(Δ, w, cdim, kw...)),
+            @thunk(grad_ev(seed, eX, Δ, w)),
+            DoesNotExist(),
+        )
+    end
+    return back
 end
 
 end

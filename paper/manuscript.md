@@ -7,113 +7,221 @@ bibliography:
     - probeml.bib
 ---
 
+# refs
+
+Trace estimation as part of gaussian process:
+- http://papers.neurips.cc/paper/7985-gpytorch-blackbox-matrix-matrix-gaussian-process-inference-with-gpu-acceleration.pdf
+
+gradient approx in ML and other:
+
+- https://arxiv.org/pdf/1909.01311.pdf
+- https://arxiv.org/pdf/1911.04432.pdf
+- https://arxiv.org/pdf/1902.08651.pdf
+- http://journals.pan.pl/Content/109869/PDF/05_799-810_00925_Bpast.No.66-6_31.12.18_K2.pdf?handler=pdf
+- https://www.emc2-ai.org/assets/docs/isca-19/emc2-isca19-paper3.pdf
+- https://arxiv.org/pdf/1702.05419.pdf
+- https://arxiv.org/pdf/1609.04836.pdf
+- http://proceedings.mlr.press/v97/nokland19a/nokland19a.pdf
+
+probing:
+- https://vtechworks.lib.vt.edu/bitstream/handle/10919/90402/Kaperick_BJ_T_2019.pdf?sequence=1&isAllowed=y
+- https://arxiv.org/abs/2005.10009
+- https://arxiv.org/pdf/2010.09649v4.pdf
+
+cudnn:
+-http://people.csail.mit.edu/emer/papers/2017.03.arxiv.DNN_hardware_survey.pdf
+-https://arxiv.org/abs/1410.0759
+
+roofline:
+- https://arxiv.org/pdf/2009.05257.pdf
+- https://arxiv.org/pdf/2009.04598.pdf
+
+
+# TODO
+
+- [] Add refs
+- [] Run gpu benchmark (maybe)
+- [] Cleanup theory
+- [] Redo some plots
+
 ## Abstract
+
+bonjour
 
 ## Introduction
 
-- Convolution layer gradients are expensive
+- Convolution layer gradients are expensive and main cost of CNNs.
 - Unbiased approximation shown to be good (put refs)
-- Lesson Learned from adjoint state
+- Lessons learned from PDE adjoint state
 
 ## Theory
 
 The backpropagation through a convolution layer is the correlation between the layer input ``X`` and the backpropagated residual ``\Delta``.
 
 ```math {#grad_im2col}
-    \delta W[i,j] = X_{i,j} \times \Delta
+    \delta W[i,j] = X_{i,j}^* \Delta
 ```
-where ``X_{i,j}`` is ``X`` shifted by ``i, j`` in the image space. This correlation is conventionally implemented with the *im2col+gemm* algorithm.
 
-Another way to look at this update is to extract the trace of the outer product of ``X`` with ``\Delta`` at the offsets corresponding to the convolution kernel. While forming this outer-product would be unefficient both computationnaly and memory-wise, probing techniques [refs] provides estimates of the trace via matrix-vector products.
+where ``X_{i,j}`` is ``X`` shifted by ``i, j`` in the image space (``X[x-i, y-j, C, B]``). This correlation is conventionally implemented with the *im2col+gemm* algorithm. While computationnaly extremely optimized and efficient, these implementation rely on costly memory layout transofrmation or implisic non-uniform indexing that do not necessarily scale for either large images or large batch sizes.
+
+These correlations can be reformulated as the extraction of the diagonal and off-diagonal traces of the outer product of ``X`` with ``\Delta`` at the offsets corresponding to the kernel indices.For example, the diagonals corresponding to a 3x3 convolution are at offsets ``[-N_x-1, -N_x, -N_x+1, -1, 0, 1, N_x-1, N_x, N_x+1]``. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise, probing techniques [refs] proved an unbiased estimate of the traces that only requires matrix-vector products. This unbiased estimator is defined as:
 
 ```math {#grad_ev}
-    \tilde{\delta W[i,j]} = \frac{12}{M} \sum_{i=1}^M z_i^T X \Delta^T z_i
+    \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z_{i,j}^* \tilde{X} \tilde{\Delta}^* z \\
+    \mathbb{E}(\widetilde{\delta W[i,j]}) &= \delta W[i,j],
 ```
 
-Where ``\tilde{X}, \tilde{\Delta}`` are ``X, \Delta`` vectorized along the image and channel dimensions and ``z_i`` are random probing vector drawn from ``\mathcal{U}(-.5, .5)``. 
+where ``\tilde{X}, \tilde{\Delta}`` are ``X, \Delta`` vectorized along the image and channel dimensions and ``z`` are ``M`` random probing vectors drawn from ``\mathcal{U}(-.5, .5)``. The sum is normalized by ``c_0`` to compensate for the variance of the shifted uniform distribution. In theory, Radamaecher or ``\mathcal{N}(0, 1)`` distibutions for ``z`` would provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance. Our choice of distribution is still acceptable since the probing vector ``z`` satisfies:
 
-
-# Simplified performance estimates
-
-We consider here the flop estimates for two cases of a convolution layer with kernel size ``K x K``. The standard dot-product based correlation of input and output, and the probing trace estimate for a single probing vector (``M=1`` in Eq. #grad_ev). We consider a signle channel input ``x \in \mathcal{R}^{N_x \times N_y \times 1 \times B}`` and single channel residual ``\Delta \in \mathcal{R}^{N_x \times N_y \times 1 \times B}`` where ``N`` is the number of pixels in each image dimension and  ``B``is the batch size.
-
-The simplest way to compute the standard gradient is to sum over batches the shifted correlation of input and output. Each of the correlation is a dot product that requires ``N=N_x N_y`` multiplications and ``N-1`` additions. This leads to the estimate:
-
-```math {#flops-std}
-Flops_{std} = K B (N + N - 1) \approx 2KBN
+```math {#reqs}
+  \mathbb{E}(z) = 0, \ \ \mathbb{E}(z^*z) = c_0
 ```
 
-That is linear in the image dimension, kernel size and batchsize. The estimate of the trace corresponding to ``\delta W[i, j]`` via probing on the other hand reuqires three steps:
-
-- 1. Multiply ``\Delta`` by probing the vector ``z_1``.
-- 2. Multiply the result by ``X``.
-- 3. Multiply by ``z_1^{i,j}`` that is ``z_1`` shifted by ``i+N_x*j`` to extract the offdiagonal trace.
-
-It is important to note that steps 1 and 2 are common to all offsets and only need to be computed once. Each of these steps requires a single matrix-vector product of respective sizes ``B \text{ by } N , N``, ``B \text{ by } N , B`` and ``N , N`` that sums up to:
-
-```math {#flops-eiv}
-Flops_{ev} &= B (N + N + N-1) + N (B + B-1) + K (N + N - 1) \\
-      &= 3NB +  2BN + 2KN \\
-      &= (5B + 2K) N
-```
-
-That is linear in ``N`` as well but affine in ``B`` and ``K``. From these two estimate, we can compute the Flop ratio between the two methods:
-
-```math {#ratio}
-  r = \frac{2KBN}{ (5B + 2K) N} = \frac{2KN}{2K + 2B}
-```
-
-This computatonal ratio is independent of the image size since both flop estimates are linear with respect ot i. We plot this ratio for varying batch size ``B`` and kernel size ``K`` in Figure #ratio-flops. We show there that, admitely for a very simple performance model, that probing method can be cheaper up to a factor of almost 50 for large batch size. This computational adavantage comes from the fact that the batch size is absorbed in the outer product of ``X`` and ``\Delta`` rather than in a loop.
-
-#### Figure: {#ratio-flops}
-![ratio](figures/ratio.png)
-:Ratio ``\frac{2KB}{5B+2K}`` for varying stencil and batch size. High value mean EIV is more efficient (up to 40 times better for small stencil, high batch size)
-
+and guaranties the unbiasing of our estimate.
 
 # Experiments
 
-In order to validate our method and provide a more rigorous evalation of its efficientcy, we compare our method agains [NNlib.jl](https://github.com/FluxML/NNlib.jl) [refs]. NNlib is an advanced librairie for CNNs that implements state of the art *im2col+gemm* on CPUs and interfaces to cuDNN on GPUs via [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl) that implements highly efficient optimized kernels. We consider the three folowing benchmarks:
+In order to validate our method and provide a more rigorous evalation of its cmputational efficientcy, we compare our method against [NNlib.jl](https://github.com/FluxML/NNlib.jl) [refs]. NNlib is an advanced Julia [refs] package for CNNs that implements state of the art *im2col+gemm* on CPUs and interfaces with the highly optimized kernels of cuDNN on GPUs via [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl). We consider the three folowing benchmarks to validate our proposed method:
 
-- Accuracy. We look at the accuracy of the obtained gradient against the true gradient for varying batch size, image size and number of probing vectors.
-- Biasing. We verify the the gradient is unbiased using the CIFAR10 dataset computing expectation of our gradient approximation against the true gradient.
-- Pure performance. In this case we consider the computational runtime for a single convolution layer gradient for varying image size, batch size and number of channel. This benchmark is performed on CPU and GPU
+- **Accuracy**. We look at the accuracy of the obtained gradient against the true gradient for varying batch size, image size and number of probing vectors.
+- **Biasing**. We verify the the gradient is unbiased using the CIFAR10 dataset computing expectation of our gradient approximation against the true gradient.
+- **Computational performance**. In this case we consider the computational runtime for a single convolution layer gradient for varying image size, batch size and number of channel. This benchmark is performed on CPU and GPU.
+- **Training**. This last experiments verifies that our unbiased estimator can be used to train convolutional networks and leads to good accuracy. We show the training on the MNIST dataset and show that, for large batch size, our estimator provides comparable accuracy to conventional training.
 
 ## Accuracy and bias
 
-We compute the gradient with respect to the filter of ``\frac{1}{2}||C(X) - Y||^2`` where ``C`` is a convolution layer ([FLux.jl](https://github.com/FluxML/NNlib.jl)) without bias and no activation and ``Y`` is a batc hof images from the CIFAR10 dataset. We consider two cases for ``X``. In the first case, ``X`` is a batch drawn from the CIFAR10 dataset and in the second case, ``X`` is a random variable drawn from ``\mathcal{N}(0, 1)``.
+We compute the gradient with respect to the filter of the standard image-to-image mean-square error ``\frac{1}{2}||C(X) - Y||^2`` where ``C`` is pure convolution layer ([Flux.jl](https://github.com/FluxML/NNlib.jl)) and ``Y`` is a batch of images from the CIFAR10 dataset. We consider two cases for ``X``. In the first case, ``X`` is a batch drawn from the CIFAR10 dataset as well while in the second case, ``X`` is a random variable drawn from ``\mathcal{N}(0, 1)``.
 
 #### Figure: {#bias-cifar10-rand}
 ![probing size=4](figures/bias/var_grad1_CIFAR10-randX.png){width=50%}
 ![probing size=8](figures/bias/var_grad2_CIFAR10-randX.png){width=50%}\
 ![probing size=16](figures/bias/var_grad3_CIFAR10-randX.png){width=50%}
 ![probing size=32](figures/bias/var_grad4_CIFAR10-randX.png){width=50%}
-: Gradients for ``X`` dran from the normal distribution. We can see than in expectation, the probed gradient corresponds to the true gradient making it unbiased. 
-
+: Gradients with ``X`` drawn from the normal distribution.
 
 #### Figure: {#bias-cifar10}
 ![probing size=4](figures/bias/var_grad1_CIFAR10.png){width=50%}
 ![probing size=8](figures/bias/var_grad2_CIFAR10.png){width=50%}\
 ![probing size=16](figures/bias/var_grad3_CIFAR10.png){width=50%}
 ![probing size=32](figures/bias/var_grad4_CIFAR10.png){width=50%}
-: Gradients for ``X`` drawn from the CIFAR10 dataset. We can see than in expectation, the probed gradient corresponds to the true gradient making it unbiased. 
+: Gradients with ``X`` drawn from the CIFAR10 dataset.
 
-We show these gradients on Figures #bias-cifar10 and #bias-cifar10-rand\. These figures demonstrates three points. First, we can see that an increasing number of probing vector leads to a better estimate of the gradient and a reduced standard deviation making a single sample a more accurate estimates. Second, we show that our estimate is unbiased as both the mean and mediam matches the the true gradient. Finally, these figures show that our gradient estimate is accurate and converges to the true gradient as the probing size increases, and we also show in Figure #batch-effect that our estimates is more accurate for larger batch sizes and/or larger images.
-
-
+We show these gradients on Figures #bias-cifar10 and #bias-cifar10-rand\. These figures demonstrate three points. First, we can see that an increasing number of probing vector leads to a better estimate of ``\delta W[i,j]`` and a reduced standard deviation making a single sample a more accurate estimates following theoretical expectations from the litterature. Second, we show that our estimate is unbiased as both the mean and mediam matches the true gradient. Finally, these figures show that an increased batch size leads to a more accurate estimator and a reduced variance allowing a smaller number of probing vector, therefore a better perormance, for a larger batch size.
 
 ## Performance
 
-Figures from simple_bench.jl
-Figures from ad_bench.jl and add size/....
+We show on Figure #cpu-bench and #gpu-bench the benchmarked runtime to compute a single gradient with NNlib and with our method for varying image sizes and batch sizes. The benchmark was done for a small (4 =>4) and large number of channel (32 =>32).
 
 #### Figure: {#cpu-bench}
-![probing size=4](figures/bias/var_grad1_CIFAR10.png){width=50%}
-
+![B=4](figures/runtimes/bench_cpu_4_4.png){width=40%}
+![B=4](figures/runtimes/bench_cpu_32_4.png){width=40%}\
+![B=8](figures/runtimes/bench_cpu_4_8.png){width=40%}
+![B=8](figures/runtimes/bench_cpu_32_8.png){width=40%}\
+![B=16](figures/runtimes/bench_cpu_4_16.png){width=40%}
+![B=16](figures/runtimes/bench_cpu_32_16.png){width=40%}\
+![B=32](figures/runtimes/bench_cpu_4_32.png){width=40%}
+![B=32](figures/runtimes/bench_cpu_32_32.png){width=40%}\
+![B=64](figures/runtimes/bench_cpu_4_64.png){width=40%}
+![B=64](figures/runtimes/bench_cpu_32_64.png){width=40%}\
+:CPU benchmark on a *Intel(R) Xeon(R) CPU E3-1270 v6 @ 3.80GHz* node. The left column contains the runtimes for 4 channels and the right column for 32 channels. We can see that for large images and batch sizes, our implementation provides a consequent performance gain.
 
 #### Figure: {#gpu-bench}
-![probing size=4](figures/bias/var_grad1_CIFAR10.png){width=50%}
+![B=4](figures/runtimes/bench_cpu_4_4.png){width=40%}
+:GPU benchmark, placeholder
 
 
-# Implementation
+These benchmarking results show that the proposed method leads to significant speedup (up to X10) in the computation of the gradient which would lead to drastic cost reduction for training a network.
 
-Our probing algorithm is implemented in julia using BLAS on PU and CUBALS on GPU for the linear algenbra computations.
+## Training
+
+### MNIST
+
+- Tesla K80
+- Network is a standard convolution network:
+  - Conv(1=>16) -> MaxPool -> Conv(16=>32) -> MaxPool -> Conv(32=>32) - MaxPool -> flatten -> dense
+- 20 epochs`
+- ADAM with initial learning rate of ``.003``
+- MNSIST dataset for varying batch size and probing size
+
+### Table: {#MNIST-batch}
+|           | ``B=32``   | ``B=64``   | ``B=128``  | ``B=256``  | ``B=512``  | ``B=1024`` |
+|:---------:|:----------:|:----------:|:----------:|:----------:|:----------:|:----------:|
+| default   | ``0.9922`` | ``0.9930`` | ``0.9936`` | ``0.9923`` | ``0.9918`` | ``0.9884`` |
+| ``ps=2``  | ``0.9656`` | ``0.9474`` | ``0.9610`` | ``0.9584`` | ``0.9472`` | ``0.9394`` |
+| ``ps=4``  | ``0.9676`` | ``0.9693`` | ``0.9723`` | ``0.9634`` | ``0.9579`` | ``0.9498`` |
+| ``ps=8``  | ``0.9762`` | ``0.9721`` | ``0.9728`` | ``0.9762`` | ``0.9627`` | ``0.9625`` |
+| ``ps=16`` | ``0.9817`` | ``0.9831`` | ``0.9824`` | ``0.9830`` | ``0.9790`` | ``0.9735`` |
+| ``ps=32`` | ``0.9818`` | ``0.9862`` | ``0.9847`` | ``0.9838`` | ``0.9815`` | ``0.9789`` |
+| ``ps=64`` | ``0.9874`` | ``0.9829`` | ``0.9877`` | ``0.9848`` | ``0.9819`` | ``0.9803`` |
+
+: Training accuracy for varying batch sizes ``B`` and number of probing vectors ``ps`` on the MNIST dataset.
+
+### CIFAR10
+
+### Table: {#CIFAR10-batch}
+|           | ``B=32``   | ``B=64``   | ``B=128``  | ``B=256``  | ``B=512``  | ``B=1024`` |
+|:---------:|:----------:|:----------:|:----------:|:----------:|:----------:|:----------:|
+| default   | ``0.9924`` | ``0.9929`` | ``0.9929`` | ``0.9923`` | ``0.9918`` | ``0.9884`` |
+| ``ps=2``  | ``0.9581`` | ``0.9591`` | ``0.9580`` | ``0.9584`` | ``0.9472`` | ``0.9394`` |
+| ``ps=4``  | ``0.9563`` | ``0.9737`` | ``0.9723`` | ``0.9634`` | ``0.9579`` | ``0.9498`` |
+| ``ps=8``  | ``0.9687`` | ``0.9696`` | ``0.9728`` | ``0.9762`` | ``0.9627`` | ``0.9625`` |
+| ``ps=16`` | ``0.9862`` | ``0.9827`` | ``0.9824`` | ``0.9830`` | ``0.9790`` | ``0.9735`` |
+| ``ps=32`` | ``0.9801`` | ``0.9820`` | ``0.9847`` | ``0.9838`` | ``0.9815`` | ``0.9789`` |
+| ``ps=64`` | ``0.9851`` | ``0.9861`` | ``0.9877`` | ``0.9848`` | ``0.9819`` | ``0.9803`` |
+
+: Training accuracy for varying batch sizes ``B`` and number of probing vectors ``ps`` on the CIFAR10 dataset.
+
+# Implementation and code availability
+
+Our probing algorithm is implemented in julia using BLAS on CPU and CUBALS on GPU for the linear algebra computations. Code is on github. The interface is designed so that preexisting networks can be reused as is overloading `rrule` (see [ChainRulesCore](https://github.com/JuliaDiff/ChainRulesCore.jl)) to switch easily between the conventional true gradient ``\delta\text{conv\_filer}`` and our probing alogrithm.
+Our code and examples are available at [XConv](https://github.com/slimgroup/XConv.jl).
+
+## Compact memory forward-backward implementation
+
+In order to reduce the memory imprint of a convolutional layer, we implemented the proposed method with a compact in memory forward-backward design. This implementation is based on the symmetry of the probing in Equation #grad_ev that is equivalent to
+
+```math {#grad_ev_x}
+    \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z^* \tilde{X} \tilde{\Delta}^* z_{-i,-j} \\
+    \mathbb{E}(\widetilde{\delta W[i,j]}) &= \delta W[i,j].
+```
+
+In this symmetrized expression, the shift are applied to the backpropagated residual that allows us to compute ``X_e =z^* \tilde{X}`` during the forward propagation through the layer. This precomputation then only requires to store the matrix ``X_e`` of size ``B x p_s`` that leads to a memory reduction by a factor of ``\frac{N_x N_y C_i}{ps}``. For example, for a small image of size ``32x32`` and ``16`` input channels, this implementation leads to a mempry reduction by a factor of ``2^{14-p}`` for ``ps=2^p``. We then only need to allocate temporary memory for each layer for the probing vector that can be redrwan from a saved random generator seed. The forward-backward algorithm is summarized in Algorithm #ev_fwd_bck\.
+
+### Algorithm: {#ev_fwd_bck}
+| Forward pass:
+| 1. Convolution ``Y = C(X)``
+| 2. Draw a random seed ``s`` and probing vectors ``z``
+| 3. Compute and save ``X_e = z^* \tilde{X}``, save the seed ``s``
+| Backward pass:
+| 1. Redraw ``z`` from ``s``
+| 2. Compute ``\widetilde{\delta W[i,j]}`` according to Equation #grad_ev_x
+: Forward-backward unbiased estimator via trace estimation.
+
+This forward-backward implementation is trivial with [ChainRulesCore](https://github.com/JuliaDiff/ChainRulesCore.jl) that provides and abstraction for the definition of custome reverse automatic differentiation rules and illustrated in #rrule\.
+
+### Code: {#rrule}
+```
+  function ChainRulesCore.rrule(::typeof(NNlib.conv), X, w, cdim::DenseConvDims; kw...)
+      Y = conv(X, w, cdim)
+      eX, seed = probe_X(X)
+      function pullback(Δ)
+          Δ = colmajor(Δ)
+          return (
+              NO_FIELDS,
+              @thunk(∇conv_data(Δ, w, cdim, kw...)),
+              @thunk(grad_ev(seed, eX, Δ, w)), # Only needs eX
+              DoesNotExist(),
+          )
+      end
+      return Y, Δconv_std(X, w, cdim; kw...)
+  end
+```
+: Forward-backward unbiased estimator with `rrule`
+
+# Conclusions
+
+- Good performance for large image and/or batchsize
+- Don't need many probing vector if batchsize lare enough
+- Fairly suboptimal implementation leads to less impressive results on GPU but can be improved
+
+# References

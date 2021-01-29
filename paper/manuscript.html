@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="generator" content="scholpandoc">
+  <meta name="viewport" content="width=device-width">
+  
+  <title>Efficient unbiased backpropagation via matrix probing for filter updates.</title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.7.1/modernizr.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/respond.js/1.4.2/respond.js"></script>
+  <link rel="stylesheet" href="https://slimgroup.slim.gatech.edu/ScholMD/standalone/slimweb-scholmd-standalone-v0.1-latest.min.css">
+</head>
+<body>
+<div class="scholmd-container">
+<div class="scholmd-main">
+<div class="scholmd-content">
+<header>
+<h1 class="scholmd-title">Efficient unbiased backpropagation via matrix probing for filter updates.</h1>
+<div class="scholmd-author">
+<p>Mathias Louboutin<sup>1</sup>, Felix J. Herrmann<sup>1</sup>, Ali Siahkoohi<sup>1</sup><br /><sup>1</sup>School of Computational Science and Engineering, Georgia Institute of Technology<br /></p>
+</div>
+</header>
+<h1 id="refs">refs</h1>
+<p>Trace estimation as part of gaussian process: - http://papers.neurips.cc/paper/7985-gpytorch-blackbox-matrix-matrix-gaussian-process-inference-with-gpu-acceleration.pdf</p>
+<p>gradient approx in ML and other:</p>
+<ul>
+<li>https://arxiv.org/pdf/1909.01311.pdf</li>
+<li>https://arxiv.org/pdf/1911.04432.pdf</li>
+<li>https://arxiv.org/pdf/1902.08651.pdf</li>
+<li>http://journals.pan.pl/Content/109869/PDF/05_799-810_00925_Bpast.No.66-6_31.12.18_K2.pdf?handler=pdf</li>
+<li>https://www.emc2-ai.org/assets/docs/isca-19/emc2-isca19-paper3.pdf</li>
+<li>https://arxiv.org/pdf/1702.05419.pdf</li>
+<li>https://arxiv.org/pdf/1609.04836.pdf</li>
+<li>http://proceedings.mlr.press/v97/nokland19a/nokland19a.pdf</li>
+</ul>
+<p>probing: - https://vtechworks.lib.vt.edu/bitstream/handle/10919/90402/Kaperick_BJ_T_2019.pdf?sequence=1&amp;isAllowed=y - https://arxiv.org/abs/2005.10009 - https://arxiv.org/pdf/2010.09649v4.pdf</p>
+<p>cudnn: -http://people.csail.mit.edu/emer/papers/2017.03.arxiv.DNN_hardware_survey.pdf -https://arxiv.org/abs/1410.0759</p>
+<p>roofline: - https://arxiv.org/pdf/2009.05257.pdf - https://arxiv.org/pdf/2009.04598.pdf</p>
+<h1 id="todo">TODO</h1>
+<ul>
+<li>[] Add refs</li>
+<li>[] Run gpu benchmark (maybe)</li>
+<li>[] Cleanup theory</li>
+<li>[] Redo some plots</li>
+</ul>
+<h2 id="abstract">Abstract</h2>
+<p>bonjour</p>
+<h2 id="introduction">Introduction</h2>
+<ul>
+<li>Convolution layer gradients are expensive and main cost of CNNs.</li>
+<li>Unbiased approximation shown to be good (put refs)</li>
+<li>Lessons learned from PDE adjoint state</li>
+</ul>
+<h2 id="theory">Theory</h2>
+<p>The backpropagation through a convolution layer is the correlation between the layer input <span class="math scholmd-math-inline">\(X\)</span> and the backpropagated residual <span class="math scholmd-math-inline">\(\Delta\)</span>. 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+    \delta W[i,j] = X_{i,j}^* \Delta
+\label{grad_im2col}
+\end{equation}
+\]</span>
+ where <span class="math scholmd-math-inline">\(X_{i,j}\)</span> is <span class="math scholmd-math-inline">\(X\)</span> shifted by <span class="math scholmd-math-inline">\(i, j\)</span> in the image space (<span class="math scholmd-math-inline">\(X[x-i, y-j, C, B]\)</span>). This correlation is conventionally implemented with the <em>im2col+gemm</em> algorithm. While computationnaly extremely optimized and efficient, these implementation rely on costly memory layout transofrmation or implisic non-uniform indexing that do not necessarily scale for either large images or large batch sizes.</p>
+<p>These correlations can be reformulated as the extraction of the diagonal and off-diagonal traces of the outer product of <span class="math scholmd-math-inline">\(X\)</span> with <span class="math scholmd-math-inline">\(\Delta\)</span> at the offsets corresponding to the kernel indices.For example, the diagonals corresponding to a 3x3 convolution are at offsets <span class="math scholmd-math-inline">\([-N_x-1, -N_x, -N_x+1, -1, 0, 1, N_x-1, N_x, N_x+1]\)</span>. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise, probing techniques <a href="#refs">refs</a> proved an unbiased estimate of the traces that only requires matrix-vector products. This unbiased estimator is defined as: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+\begin{aligned}
+    \widetilde{\delta W[i,j]} &amp;= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z_{i,j}^* \tilde{X} \tilde{\Delta}^* z \\
+    \mathbb{E}(\widetilde{\delta W[i,j]}) &amp;= \delta W[i,j],
+\end{aligned}
+\label{grad_ev}
+\end{equation}
+\]</span>
+ where <span class="math scholmd-math-inline">\(\tilde{X}, \tilde{\Delta}\)</span> are <span class="math scholmd-math-inline">\(X, \Delta\)</span> vectorized along the image and channel dimensions and <span class="math scholmd-math-inline">\(z\)</span> are <span class="math scholmd-math-inline">\(M\)</span> random probing vectors drawn from <span class="math scholmd-math-inline">\(\mathcal{U}(-.5, .5)\)</span>. The sum is normalized by <span class="math scholmd-math-inline">\(c_0\)</span> to compensate for the variance of the shifted uniform distribution. In theory, Radamaecher or <span class="math scholmd-math-inline">\(\mathcal{N}(0, 1)\)</span> distibutions for <span class="math scholmd-math-inline">\(z\)</span> would provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance. Our choice of distribution is still acceptable since the probing vector <span class="math scholmd-math-inline">\(z\)</span> satisfies: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+  \mathbb{E}(z) = 0, \ \ \mathbb{E}(z^*z) = c_0
+\label{reqs}
+\end{equation}
+\]</span>
+ and guaranties the unbiasing of our estimate.</p>
+<h1 id="experiments">Experiments</h1>
+<p>In order to validate our method and provide a more rigorous evalation of its cmputational efficientcy, we compare our method against <a href="https://github.com/FluxML/NNlib.jl">NNlib.jl</a> <a href="#refs">refs</a>. NNlib is an advanced Julia <a href="#refs">refs</a> package for CNNs that implements state of the art <em>im2col+gemm</em> on CPUs and interfaces with the highly optimized kernels of cuDNN on GPUs via <a href="https://github.com/JuliaGPU/CUDA.jl">CUDA.jl</a>. We consider the three folowing benchmarks to validate our proposed method:</p>
+<ul>
+<li><strong>Accuracy</strong>. We look at the accuracy of the obtained gradient against the true gradient for varying batch size, image size and number of probing vectors.</li>
+<li><strong>Biasing</strong>. We verify the the gradient is unbiased using the CIFAR10 dataset computing expectation of our gradient approximation against the true gradient.</li>
+<li><strong>Computational performance</strong>. In this case we consider the computational runtime for a single convolution layer gradient for varying image size, batch size and number of channel. This benchmark is performed on CPU and GPU.</li>
+<li><strong>Training</strong>. This last experiments verifies that our unbiased estimator can be used to train convolutional networks and leads to good accuracy. We show the training on the MNIST dataset and show that, for large batch size, our estimator provides comparable accuracy to conventional training.</li>
+</ul>
+<h2 id="accuracy-and-bias">Accuracy and bias</h2>
+<p>We compute the gradient with respect to the filter of the standard image-to-image mean-square error <span class="math scholmd-math-inline">\(\frac{1}{2}||C(X) - Y||^2\)</span> where <span class="math scholmd-math-inline">\(C\)</span> is pure convolution layer (<a href="https://github.com/FluxML/NNlib.jl">Flux.jl</a>) and <span class="math scholmd-math-inline">\(Y\)</span> is a batch of images from the CIFAR10 dataset. We consider two cases for <span class="math scholmd-math-inline">\(X\)</span>. In the first case, <span class="math scholmd-math-inline">\(X\)</span> is a batch drawn from the CIFAR10 dataset as well while in the second case, <span class="math scholmd-math-inline">\(X\)</span> is a random variable drawn from <span class="math scholmd-math-inline">\(\mathcal{N}(0, 1)\)</span>.</p>
+<figure class="scholmd-float scholmd-figure" id="bias-cifar10-rand">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad1_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=4</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad2_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=8</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad3_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=16</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad4_CIFAR10-randX.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=32</span></figcaption></div>
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">1</span></span><span class="scholmd-caption-text">Gradients with <span class="math scholmd-math-inline">\(X\)</span> drawn from the normal distribution.</span></figcaption></div>
+</figure>
+<figure class="scholmd-float scholmd-figure" id="bias-cifar10">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad1_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=4</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad2_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=8</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad3_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=16</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 50%">
+<img src="figures/bias/var_grad4_CIFAR10.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">probing size=32</span></figcaption></div>
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">2</span></span><span class="scholmd-caption-text">Gradients with <span class="math scholmd-math-inline">\(X\)</span> drawn from the CIFAR10 dataset.</span></figcaption></div>
+</figure>
+<p>We show these gradients on Figures <span class="scholmd-crossref"><a href="#bias-cifar10">2</a></span> and <span class="scholmd-crossref"><a href="#bias-cifar10-rand">1</a></span>. These figures demonstrate three points. First, we can see that an increasing number of probing vector leads to a better estimate of <span class="math scholmd-math-inline">\(\delta W[i,j]\)</span> and a reduced standard deviation making a single sample a more accurate estimates following theoretical expectations from the litterature. Second, we show that our estimate is unbiased as both the mean and mediam matches the true gradient. Finally, these figures show that an increased batch size leads to a more accurate estimator and a reduced variance allowing a smaller number of probing vector, therefore a better perormance, for a larger batch size.</p>
+<h2 id="performance">Performance</h2>
+<p>We show on Figure <span class="scholmd-crossref"><a href="#cpu-bench">3</a></span> and <span class="scholmd-crossref"><a href="#gpu-bench">4</a></span> the benchmarked runtime to compute a single gradient with NNlib and with our method for varying image sizes and batch sizes. The benchmark was done for a small (4 =&gt;4) and large number of channel (32 =&gt;32).</p>
+<figure class="scholmd-float scholmd-figure" id="cpu-bench">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_4.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=4</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_4.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=4</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_8.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=8</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_8.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=8</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_16.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=16</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_16.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=16</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_32.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=32</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_32.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=32</span></figcaption></div>
+</figure><br /><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_64.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=64</span></figcaption></div>
+</figure><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_32_64.png" />
+<div class="scholmd-float-subcaption"><figcaption><span class="scholmd-caption-text">B=64</span></figcaption></div>
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">3</span></span><span class="scholmd-caption-text">CPU benchmark on a <em>Intel(R) Xeon(R) CPU E3-1270 v6 @ 3.80GHz</em> node. The left column contains the runtimes for 4 channels and the right column for 32 channels. We can see that for large images and batch sizes, our implementation provides a consequent performance gain.</span></figcaption></div>
+</figure>
+<figure class="scholmd-float scholmd-figure" id="gpu-bench">
+<div class="scholmd-float-content"><figure class="scholmd-subfig" style="display: inline-block; width: 40%">
+<img src="figures/runtimes/bench_cpu_4_4.png" />
+</figure></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Figure</span><span class="scholmd-caption-head-label">4</span></span><span class="scholmd-caption-text">GPU benchmark, placeholder</span></figcaption></div>
+</figure>
+<p>These benchmarking results show that the proposed method leads to significant speedup (up to X10) in the computation of the gradient which would lead to drastic cost reduction for training a network.</p>
+<h2 id="training">Training</h2>
+<h3 id="mnist">MNIST</h3>
+<ul>
+<li>Tesla K80</li>
+<li>Network is a standard convolution network:</li>
+<li>Conv(1=&gt;16) -&gt; MaxPool -&gt; Conv(16=&gt;32) -&gt; MaxPool -&gt; Conv(32=&gt;32) - MaxPool -&gt; flatten -&gt; dense</li>
+<li>20 epochs`</li>
+<li>ADAM with initial learning rate of <span class="math scholmd-math-inline">\(.003\)</span></li>
+<li>MNSIST dataset for varying batch size and probing size</li>
+</ul>
+<figure class="scholmd-float scholmd-table-float" id="MNIST-batch">
+<div class="scholmd-float-content"><table>
+<thead>
+<tr class="header">
+<th style="text-align: center;"></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=32\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=64\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=128\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=256\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=512\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=1024\)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">default</td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9922\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9930\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9936\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9923\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9918\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9884\)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=2\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9656\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9474\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9610\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9584\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9472\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9394\)</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=4\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9676\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9693\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9723\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9634\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9579\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9498\)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=8\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9762\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9721\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9728\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9762\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9627\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9625\)</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=16\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9817\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9831\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9824\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9830\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9790\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9735\)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=32\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9818\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9862\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9847\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9838\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9815\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9789\)</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=64\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9874\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9829\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9877\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9848\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9819\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9803\)</span></td>
+</tr>
+</tbody>
+</table></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Table</span><span class="scholmd-caption-head-label">1</span></span><span class="scholmd-caption-text">Training accuracy for varying batch sizes <span class="math scholmd-math-inline">\(B\)</span> and number of probing vectors <span class="math scholmd-math-inline">\(ps\)</span> on the MNIST dataset.</span></figcaption></div>
+</figure>
+<h3 id="cifar10">CIFAR10</h3>
+<figure class="scholmd-float scholmd-table-float" id="CIFAR10-batch">
+<div class="scholmd-float-content"><table>
+<thead>
+<tr class="header">
+<th style="text-align: center;"></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=32\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=64\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=128\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=256\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=512\)</span></th>
+<th style="text-align: center;"><span class="math scholmd-math-inline">\(B=1024\)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">default</td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9924\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9929\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9929\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9923\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9918\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9884\)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=2\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9581\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9591\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9580\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9584\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9472\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9394\)</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=4\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9563\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9737\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9723\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9634\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9579\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9498\)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=8\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9687\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9696\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9728\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9762\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9627\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9625\)</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=16\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9862\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9827\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9824\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9830\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9790\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9735\)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=32\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9801\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9820\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9847\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9838\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9815\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9789\)</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(ps=64\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9851\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9861\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9877\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9848\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9819\)</span></td>
+<td style="text-align: center;"><span class="math scholmd-math-inline">\(0.9803\)</span></td>
+</tr>
+</tbody>
+</table></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Table</span><span class="scholmd-caption-head-label">2</span></span><span class="scholmd-caption-text">Training accuracy for varying batch sizes <span class="math scholmd-math-inline">\(B\)</span> and number of probing vectors <span class="math scholmd-math-inline">\(ps\)</span> on the CIFAR10 dataset.</span></figcaption></div>
+</figure>
+<h1 id="implementation-and-code-availability">Implementation and code availability</h1>
+<p>Our probing algorithm is implemented in julia using BLAS on CPU and CUBALS on GPU for the linear algebra computations. Code is on github. The interface is designed so that preexisting networks can be reused as is overloading <code>rrule</code> (see <a href="https://github.com/JuliaDiff/ChainRulesCore.jl">ChainRulesCore</a>) to switch easily between the conventional true gradient <span class="math scholmd-math-inline">\(\delta\text{conv\_filer}\)</span> and our probing alogrithm. Our code and examples are available at <a href="https://github.com/slimgroup/XConv.jl">XConv</a>.</p>
+<h2 id="compact-memory-forward-backward-implementation">Compact memory forward-backward implementation</h2>
+<p>In order to reduce the memory imprint of a convolutional layer, we implemented the proposed method with a compact in memory forward-backward design. This implementation is based on the symmetry of the probing in Equation <span class="scholmd-crossref"><span class="math scholmd-math-inline">\(\ref{grad_ev}\)</span></span> that is equivalent to 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+\begin{aligned}
+    \widetilde{\delta W[i,j]} &amp;= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z^* \tilde{X} \tilde{\Delta}^* z_{-i,-j} \\
+    \mathbb{E}(\widetilde{\delta W[i,j]}) &amp;= \delta W[i,j].
+\end{aligned}
+\label{grad_ev_x}
+\end{equation}
+\]</span>
+ In this symmetrized expression, the shift are applied to the backpropagated residual that allows us to compute <span class="math scholmd-math-inline">\(X_e =z^* \tilde{X}\)</span> during the forward propagation through the layer. This precomputation then only requires to store the matrix <span class="math scholmd-math-inline">\(X_e\)</span> of size <span class="math scholmd-math-inline">\(B x p_s\)</span> that leads to a memory reduction by a factor of <span class="math scholmd-math-inline">\(\frac{N_x N_y C_i}{ps}\)</span>. For example, for a small image of size <span class="math scholmd-math-inline">\(32x32\)</span> and <span class="math scholmd-math-inline">\(16\)</span> input channels, this implementation leads to a mempry reduction by a factor of <span class="math scholmd-math-inline">\(2^{14-p}\)</span> for <span class="math scholmd-math-inline">\(ps=2^p\)</span>. We then only need to allocate temporary memory for each layer for the probing vector that can be redrwan from a saved random generator seed. The forward-backward algorithm is summarized in Algorithm <span class="scholmd-crossref"><a href="#ev_fwd_bck">1</a></span>.</p>
+<figure class="scholmd-float scholmd-algorithm" id="ev_fwd_bck">
+<div class="scholmd-float-content"><p>Forward pass:<br />1. Convolution <span class="math scholmd-math-inline">\(Y = C(X)\)</span><br />2. Draw a random seed <span class="math scholmd-math-inline">\(s\)</span> and probing vectors <span class="math scholmd-math-inline">\(z\)</span><br />3. Compute and save <span class="math scholmd-math-inline">\(X_e = z^* \tilde{X}\)</span>, save the seed <span class="math scholmd-math-inline">\(s\)</span><br />Backward pass:<br />1. Redraw <span class="math scholmd-math-inline">\(z\)</span> from <span class="math scholmd-math-inline">\(s\)</span><br />2. Compute <span class="math scholmd-math-inline">\(\widetilde{\delta W[i,j]}\)</span> according to Equation <span class="scholmd-crossref"><span class="math scholmd-math-inline">\(\ref{grad_ev_x}\)</span></span></p></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Algorithm</span><span class="scholmd-caption-head-label">1</span></span><span class="scholmd-caption-text">Forward-backward unbiased estimator via trace estimation.</span></figcaption></div>
+</figure>
+<p>This forward-backward implementation is trivial with <a href="https://github.com/JuliaDiff/ChainRulesCore.jl">ChainRulesCore</a> that provides and abstraction for the definition of custome reverse automatic differentiation rules and illustrated in <span class="scholmd-crossref"><a href="#rrule">1</a></span>.</p>
+<figure class="scholmd-float scholmd-listing-float" id="rrule">
+<div class="scholmd-float-content"><pre><code>  function ChainRulesCore.rrule(::typeof(NNlib.conv), X, w, cdim::DenseConvDims; kw...)
+      Y = conv(X, w, cdim)
+      eX, seed = probe_X(X)
+      function pullback(Δ)
+          Δ = colmajor(Δ)
+          return (
+              NO_FIELDS,
+              @thunk(∇conv_data(Δ, w, cdim, kw...)),
+              @thunk(grad_ev(seed, eX, Δ, w)), # Only needs eX
+              DoesNotExist(),
+          )
+      end
+      return Y, Δconv_std(X, w, cdim; kw...)
+  end</code></pre></div>
+<div class="scholmd-float-caption"><figcaption><span class="scholmd-caption-head"><span class="scholmd-caption-head-prefix">Listing</span><span class="scholmd-caption-head-label">1</span></span><span class="scholmd-caption-text">Forward-backward unbiased estimator with <code>rrule</code></span></figcaption></div>
+</figure>
+<h1 id="conclusions">Conclusions</h1>
+<ul>
+<li>Good performance for large image and/or batchsize</li>
+<li>Don’t need many probing vector if batchsize lare enough</li>
+<li>Fairly suboptimal implementation leads to less impressive results on GPU but can be improved</li>
+</ul>
+<h1 id="references">References</h1>
+<style>
+    .scholmd-container {
+        padding-top: 60px !important;
+    }
+
+    #criticnav {
+      position: fixed;
+      z-index: 1100;
+      top: 0;
+      left: 0;
+      width: 100%;
+      border-bottom: solid 1px #696f75;
+      margin: 0;
+      padding: 0;
+      background-color: rgba(255,255,255,0.95);
+      color: #696f75;
+      font-size: 14px;
+      font-family: "Helvetica Neue", helvetica, arial, sans-serif !important
+    }
+
+    #criticnav ul {
+      list-style-type: none;
+      width: 90%;
+      margin: 0 auto;
+      padding: 0
+    }
+
+    #criticnav ul li {
+      display: block;
+      width: 15%;
+      min-width: 100px;
+      text-align: center;
+      padding: 5px 0 3px !important;
+      margin: 5px 2px !important;
+      line-height: 1em;
+      float: left;
+      text-transform: uppercase;
+      cursor: pointer;
+      -webkit-user-select: none;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0);
+      color: #777 !important
+    }
+
+    #criticnav ul li:before {
+      content: none !important
+    }
+
+    #criticnav ul li.active {
+      border: 1px solid #696f75
+    }
+
+    .original del {
+        
+            text-decoration: none;
+    }   
+
+    .original ins,
+    .original span.popover,
+    .original ins.break {
+        display: none;
+    }
+
+    .edited ins {
+        
+            text-decoration: none;
+    }   
+
+    .edited del,
+    .edited span.popover,
+    .edited ins.break {
+        display: none;
+    }
+
+    .original mark,
+    .edited mark {
+        background-color: transparent;
+    }
+
+    .markup mark {
+        background-color: #fffd38;
+        text-decoration: none;
+    }
+
+    .markup del {
+        background-color: rgba(183,47,47,0.4);
+        text-decoration: none;
+    }
+
+    .markup ins {
+        background-color: rgba(152,200,86,0.4);
+        text-decoration: none;
+    }
+
+    .markup ins.break {
+        display: block;
+        line-height: 2px;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .markup ins.break span {
+        line-height: 1.5em;
+    }
+
+    .markup .popover {
+        background-color: #e5b000;
+        color: #fff;
+    }
+
+    .markup .popover .critic.comment {
+        display: none;
+    }
+
+    .markup .popover:hover span.critic.comment {
+        display: block;
+        position: absolute;
+        width: 200px;
+        left: 30%;
+        font-size: 0.8em; 
+        color: #ccc;
+        background-color: #333;
+        z-index: 10;
+        padding: 0.5em 1em;
+        border-radius: 0.5em;
+    }
+
+    @media print {
+        #criticnav {
+            display: none !important
+        }
+    }
+}
+
+</style>
+<div id="criticnav">
+<ul>
+<li id="markup-button">
+Markup
+</li>
+<li id="original-button">
+Original
+</li>
+<li id="edited-button">
+Edited
+</li>
+</ul>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script type="text/javascript">
+
+    function critic() {
+
+        $('.scholmd-container').addClass('markup');
+        $('#markup-button').addClass('active');
+        $('ins.break').unwrap();
+        $('span.critic.comment').wrap('<span class="popover" />');
+        $('span.critic.comment').before('&#8225;');
+
+    }  
+
+    function original() {
+        $('#original-button').addClass('active');
+        $('#edited-button').removeClass('active');
+        $('#markup-button').removeClass('active');
+
+        $('.scholmd-container').addClass('original');
+        $('.scholmd-container').removeClass('edited');
+        $('.scholmd-container').removeClass('markup');
+    }
+
+    function edited() {
+        $('#original-button').removeClass('active');
+        $('#edited-button').addClass('active');
+        $('#markup-button').removeClass('active');
+
+        $('.scholmd-container').removeClass('original');
+        $('.scholmd-container').addClass('edited');
+        $('.scholmd-container').removeClass('markup');
+    } 
+
+    function markup() {
+        $('#original-button').removeClass('active');
+        $('#edited-button').removeClass('active');
+        $('#markup-button').addClass('active');
+
+        $('.scholmd-container').removeClass('original');
+        $('.scholmd-container').removeClass('edited');
+        $('.scholmd-container').addClass('markup');
+    }
+
+    var o = document.getElementById("original-button");
+    var e = document.getElementById("edited-button");
+    var m = document.getElementById("markup-button");
+
+    window.onload = critic;
+    o.onclick = original;
+    e.onclick = edited;
+    m.onclick = markup;
+
+</script>
+<div class="references">
+
+</div>
+</div>
+</div>
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+    tex2jax: {
+      processClass: "math"
+    },
+    TeX: {
+        TagSide: "left",
+        TagIndent: "1.2em",
+        equationNumbers: {
+            autoNumber: "AMS"
+        },
+        Macros: {
+            ensuremath: ["#1",1],
+            textsf: ["\\mathsf{\\text{#1}}",1],
+            texttt: ["\\mathtt{\\text{#1}}",1]
+        }
+    },
+    "HTML-CSS": { 
+        scale: 100,
+        availableFonts: ["TeX"], 
+        preferredFont: "TeX",
+        webFont: "TeX",
+        imageFont: "TeX",
+        EqnChunk: 1000
+    }
+});
+</script>
+<script src="https://slimgroup.slim.gatech.edu/MathJax/MathJax.js?config=TeX-AMS_HTML-full" type="text/javascript"></script>
+</div>
+</body>
+</html>
