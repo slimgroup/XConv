@@ -7,8 +7,8 @@ dispgemm!(tA::Char, α::Float32, A::AbstractArray{Float32, 2}, b::AbstractArray{
 dispgemm!(tA::Char, α::Float32, A::AbstractArray{Float32, 2}, b::AbstractArray{Float32, 1}, β::Float32, c::CuArray{Float32, 1}) = CUBLAS.gemv!(tA, α, A, b, β, c)
 
 # MatMat
-dispgemm!(tA::Char, tB::Char, α::Float32, A::AbstractArray{Float32, 2}, b::Array{Float32, 2}, β::Float32, c) = LinearAlgebra.BLAS.gemm!(tA, tB, α, A, b, β, c)
-dispgemm!(tA::Char, tB::Char, α::Float32, A::AbstractArray{Float32, 2}, b::CuArray{Float32, 2}, β::Float32, c) = CUBLAS.gemm!(tA, tB, α, A, b, β, c)
+dispgemm!(tA::Char, tB::Char, α::Float32, A::AbstractArray{Float32, 2}, b::AbstractArray{Float32, 2}, β::Float32, c::Array{Float32, 2}) = LinearAlgebra.BLAS.gemm!(tA, tB, α, A, b, β, c)
+dispgemm!(tA::Char, tB::Char, α::Float32, A::AbstractArray{Float32, 2}, b::AbstractArray{Float32, 2}, β::Float32, c::CuArray{Float32, 2}) = CUBLAS.gemm!(tA, tB, α, A, b, β, c)
 
 # Batched mat-mat
 Bgemm!(tA, tB, α, A::AbstractArray, B::AbstractArray, β, C::Array) = NNlib.batched_gemm!(tA, tB, α, A, B, β, C)
