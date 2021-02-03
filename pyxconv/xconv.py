@@ -15,7 +15,7 @@ def dilate(y, co: int, nx: int, ny: int, b: int, stride: Tuple[int, int]):
     sx, sy = stride
     if sx == 1 and sy == 1:
         return y
-    yd = torch.zeros(b, co, nx, ny)
+    yd = torch.zeros(b, co, nx, ny, device=y.device)
     yd[:, :, ::sx, ::sy] = y
     return yd
 
@@ -25,14 +25,14 @@ def back_probe(seed: int, nx: int, ny: int, ci: int, co: int,
                grad_output, eX):
     # Redraw e
     torch.random.manual_seed(seed)
-    e = torch.randn(nx*ny*ci, ps).T
+    e = torch.randn(nx*ny*ci, ps, device=eX.device).T
 
     # Y' X e
     Ye = grad_output.view(b, -1)
     LRe = torch.mm(eX.T, Ye)
 
     # Init gradien
-    grad_weight = torch.zeros(co, ci, nw*nw)
+    grad_weight = torch.zeros(co, ci, nw*nw, device=eX.device)
 
     # reshape
     # e as N x nchi x ps
@@ -60,7 +60,7 @@ class Xconv2D(torch.autograd.Function):
         torch.random.manual_seed(seed)
 
         Xv = input.view(input.shape[0], -1)
-        e = torch.randn(Xv.shape[1], ps)
+        e = torch.randn(Xv.shape[1], ps, device=input.device)
         eX = torch.mm(Xv, e)
 
         ctx.xshape = input.shape
@@ -87,7 +87,7 @@ class Xconv2D(torch.autograd.Function):
 conv2d = Xconv2D.apply
 
 class Xconv2D(torch.nn.modules.conv._ConvNd):
-    def __init__(self, chi, cho, k, ps=8, bias=None, stride=1, padding=1, dilation=1, groups=1, padding_mode='zeros'):
+    def __init__(self, chi, cho, k, ps=8, bias=None, stride=1, padding=0, dilation=1, groups=1, padding_mode='zeros'):
         kernel_size = _pair(k)
         stride = _pair(stride)
         padding = _pair(padding)
@@ -100,7 +100,7 @@ class Xconv2D(torch.nn.modules.conv._ConvNd):
 
 
 if __name__ == "__main__":
-    c = Xconv2D(4, 4, (3, 3), bias=False, ps=8, stride=2)
+    c = Xconv2D(4, 4, (3, 3), bias=False, ps=16, stride=2)
     c2 = nn.Conv2d(4, 4, (3, 3), bias=False, padding=1, stride=2)
 
     c2.weight = c.weight

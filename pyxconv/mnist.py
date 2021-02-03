@@ -6,20 +6,20 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
-from xconv import *
+
+from xconv import Xconv2D
 
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = Xconv2D(1, 32, 3, 1)
-        self.conv2 = Xconv2D(32, 64, 3, 1)
+        self.conv1 = Xconv2D(1, 32, 3, 8, 1, padding=1)
+        self.conv2 = Xconv2D(32, 64, 3, 16, 1, padding=1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
         self.fc1 = nn.Linear(12544, 128)
         self.fc2 = nn.Linear(128, 10)
 
     def forward(self, x):
-
         x = self.conv1(x)
         x = F.relu(x)
         x = self.conv2(x)
@@ -42,7 +42,6 @@ def train(args, model, device, train_loader, optimizer, epoch):
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
-        # from IPython import embed; embed()
         loss.backward()
         optimizer.step()
         if batch_idx % args.log_interval == 0:
