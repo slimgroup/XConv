@@ -19,7 +19,7 @@ ny = 64
 batchsize = 32
 n_in = 2
 n_out = 2
-stride = 1
+stride = (2, 2)
 nw   = 3;
 
 # Flux network
@@ -43,9 +43,9 @@ fig.suptitle("Conv layer gradient chi-$(n_in), cho-$(n_out)")
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    # local X = randn(Float32, nx, ny, n_in, b)
-    # local Y = C(X) - randn(Float32, nx, ny, n_out, b)
-    local X, Y =  getbatch_CIFAR10(b, n_in, n_out)
+    local X = randn(Float32, nx, ny, n_in, b)
+    local Y = C(X) - randn(Float32, div(nx, stride[1]), div(ny, stride[2]), n_out, b)
+    # local X, Y =  getbatch_CIFAR10(b, n_in, n_out)
 
     cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 

@@ -2,7 +2,7 @@ module XConv
 
 # Dependencies
 using Random
-using LinearAlgebra
+using LinearAlgebra, IterTools
 using CUDA, GPUArrays
 using NNlib
 using ChainRulesCore
@@ -53,7 +53,7 @@ function Δconv_ev(X, w, cdim; kw...)
         return (
             NO_FIELDS,
             @thunk(∇conv_data(Δ, w, cdim, kw...)),
-            @thunk(grad_ev(seed, eX, Δ, w)),
+            @thunk(grad_ev(seed, eX, Δ, w, strides(cdim))),
             DoesNotExist(),
         )
     end
