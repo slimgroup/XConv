@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.autograd.profiler as profiler
 
 import numpy as np
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 
 _pair = torch.nn.modules.utils._pair
 
@@ -15,12 +15,13 @@ class Xconv2D(torch.autograd.Function):
     def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0, dilation=1, groups=1):
         seed = torch.randint(1000, (1,))
         torch.random.manual_seed(seed)
-
-        Xv = X.view(X.shape[0], -1)
-        e = torch.randn(Xv.shape[1], ps)
-        eX = torch.mm(Xv, e)
-
         ctx.xshape = input.shape
+
+        input = input.view(input.shape[0], -1)
+        e = torch.randn(input.shape[1], ps)
+        eX = torch.mm(input, e)
+
+        input = input.view(ctx.xshape)
         ctx.save_for_backward(eX, seed, weight, bias)
 
         return F.conv2d(input, weight, bias=bias, stride=stride, padding=padding, groups=groups)
@@ -61,7 +62,7 @@ class Xconv2D(torch.autograd.Function):
             grad_weight[:, :, i] += torch.sum(bm, 0)
 
         return None, grad_weight.reshape(weight.shape)/ps, None, None, None, None, None, None
-    
+
 conv2d = Xconv2D.apply
 
 class Xconv2D(torch.nn.modules.conv._ConvNd):
@@ -73,17 +74,17 @@ class Xconv2D(torch.nn.modules.conv._ConvNd):
         super(Xconv2D, self).__init__(chi, cho, kernel_size, stride, padding, dilation, False, _pair(0), groups, bias, padding_mode)
         self.ps = ps
 
-    def forward(self, input):       
+    def forward(self, input):
         return conv2d(input, self.weight, self.ps, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
 
 if __name__ == "__main__":
     c =  Xconv2D(4, 4, (3, 3),bias=False, ps=8)
     c2 = nn.Conv2d(4, 4, (3, 3),bias=False, padding=1)
- 
+
     c2.weight = c.weight
 
-    X = torch.randn(64, 4, 256, 256) 
+    X = torch.randn(64, 4, 256, 256)
 
     with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         y = c(X)
@@ -101,4 +102,4 @@ if __name__ == "__main__":
     plt.plot(grad_t[0].numpy().reshape(-1), label='ev')
     plt.plot(grad_t2[0].numpy().reshape(-1), label='torch')
     plt.legend()
-    plt.show() 
+    plt.show()
