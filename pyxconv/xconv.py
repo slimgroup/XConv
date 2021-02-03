@@ -15,7 +15,7 @@ def dilate(y, co: int, nx: int, ny: int, b: int, stride: Tuple[int, int]):
     sx, sy = stride
     if sx == 1 and sy == 1:
         return y
-    yd = torch.zeros(b, co, nx, ny)
+    yd = torch.zeros(b, co, nx, ny, device=y.device)
     yd[:, :, ::sx, ::sy] = y
     return yd
 
@@ -25,14 +25,14 @@ def back_probe(seed: int, nx: int, ny: int, ci: int, co: int,
                grad_output, eX):
     # Redraw e
     torch.random.manual_seed(seed)
-    e = torch.randn(nx*ny*ci, ps).T
+    e = torch.randn(nx*ny*ci, ps, device=eX.device).T
 
     # Y' X e
     Ye = grad_output.view(b, -1)
     LRe = torch.mm(eX.T, Ye)
 
     # Init gradien
-    grad_weight = torch.zeros(co, ci, nw*nw)
+    grad_weight = torch.zeros(co, ci, nw*nw, device=eX.device)
 
     # reshape
     # e as N x nchi x ps
@@ -60,7 +60,7 @@ class Xconv2D(torch.autograd.Function):
         torch.random.manual_seed(seed)
 
         Xv = input.view(input.shape[0], -1)
-        e = torch.randn(Xv.shape[1], ps)
+        e = torch.randn(Xv.shape[1], ps, device=input.device)
         eX = torch.mm(Xv, e)
 
         ctx.xshape = input.shape
