@@ -11,7 +11,7 @@ def back_probe(seed: int, N: int, ci: int, co: int,
                grad_output, eX):
     # Redraw e
     torch.random.manual_seed(seed)
-    e = torch.randn(N*ci, ps, device=eX.device).T
+    e = torch.randn(ci, N, ps, device=eX.device).permute(0, 2, 1)
 
     # Y' X e
     Ye = grad_output.view(b, -1)
@@ -20,23 +20,18 @@ def back_probe(seed: int, N: int, ci: int, co: int,
     # Init gradien
     grad_weight = torch.zeros(co, ci, nw, device=eX.device)
 
-    # reshape
-    # e as N x nchi x ps
-    e = e.view(ps, ci, N).permute(0, 2, 1)
     # Loop over offsets (can be improved later on)
     se = offs[-1]
     eend = N - se
-    # LRE as ncho x N x ps
-    LRe = LRe.view(ps, co, N)[:, :, se:eend]
+    # LRE as ncho x (N x ps)
+    LRe = torch.narrow(LRe.view(ps, co, N), 2, se, eend-se).permute(1, 0, 2).reshape(co, -1).t()
     for i, o in enumerate(offs):
-        # View shifted e
-        ev = e[:, (se+o):(eend+o), :]
-        bm = torch.bmm(LRe, ev)
-        grad_weight[:, :, i] += torch.sum(bm, 0)
-    return grad_weight/ps
+        torch.mm(torch.narrow(e, 2, se+o, eend-se).reshape(ci, -1), LRe, out=grad_weight[:, :, i])
+    return grad_weight.permute(1,0,2)/ps
+
 
 @torch.jit.script
-def fwd_probe(ps: int, seed: int, X):
+def fwd_probe(ps: int, X):
     Xv = X.view(X.shape[0], -1)
     e = torch.randn(Xv.shape[1], ps, device=X.device)
     eX = torch.mm(Xv, e)
@@ -49,7 +44,7 @@ class Xconv2D(torch.autograd.Function):
     def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0, dilation=1, groups=1):
         seed = torch.randint(100000, (1,))
         torch.random.manual_seed(seed)
-        eX = fwd_probe(ps, seed, input)
+        eX = fwd_probe(ps, input)
 
         ctx.xshape = input.shape
         ctx.stride = stride
@@ -80,7 +75,7 @@ class Xconv3D(torch.autograd.Function):
     def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0, dilation=1, groups=1):
         seed = torch.randint(100000, (1,))
         torch.random.manual_seed(seed)
-        eX = fwd_probe(ps, seed, input)
+        eX = fwd_probe(ps, input)
 
         ctx.xshape = input.shape
         ctx.stride = stride
