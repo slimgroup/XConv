@@ -14,7 +14,7 @@ def back_probe(seed: int, N: int, ci: int, co: int,
     e = torch.randn(ci, N, ps, device=eX.device).permute(0, 2, 1)
 
     # Y' X e
-    Ye = grad_output.view(b, -1)
+    Ye = grad_output.reshape(b, -1)
     LRe = torch.mm(eX.T, Ye)
 
     # Init gradien
@@ -24,7 +24,7 @@ def back_probe(seed: int, N: int, ci: int, co: int,
     se = offs[-1]
     eend = N - se
     # LRE as ncho x (N x ps)
-    LRe = torch.narrow(LRe.view(ps, co, N), 2, se, eend-se).permute(1, 0, 2).reshape(co, -1).t()
+    LRe = torch.narrow(LRe.reshape(ps, co, N), 2, se, eend-se).permute(1, 0, 2).reshape(co, -1).t()
     for i, o in enumerate(offs):
         torch.mm(torch.narrow(e, 2, se+o, eend-se).reshape(ci, -1), LRe, out=grad_weight[:, :, i])
     return grad_weight.permute(1,0,2)/ps
@@ -32,7 +32,7 @@ def back_probe(seed: int, N: int, ci: int, co: int,
 
 @torch.jit.script
 def fwd_probe(ps: int, X):
-    Xv = X.view(X.shape[0], -1)
+    Xv = X.reshape(X.shape[0], -1)
     e = torch.randn(Xv.shape[1], ps, device=X.device)
     eX = torch.mm(Xv, e)
     return eX
@@ -48,6 +48,9 @@ class Xconv2D(torch.autograd.Function):
 
         ctx.xshape = input.shape
         ctx.stride = stride
+        ctx.dilation = dilation
+        ctx.groups = groups
+        ctx.padding = padding
         ctx.save_for_backward(eX, seed, weight, bias)
 
         with torch.no_grad():
@@ -57,16 +60,29 @@ class Xconv2D(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         eX, seed, weight, bias = ctx.saved_tensors
-        nw = weight.shape[2]
-        _, ps = eX.shape
-        b, ci, nx, ny = ctx.xshape
-        co = grad_output.shape[1]
 
-        offs = offsets2d((nx, ny), nw)
-        delta = dilate2d(grad_output, co, (nx, ny), b, ctx.stride)
-        dw = back_probe(seed, nx*ny, ci, co, b, ps, nw**2, offs, delta, eX)
+        dx = None
+        if ctx.needs_input_grad[0]:
+            dx = torch.nn.grad.conv2d_input(ctx.xshape, weight,
+                                                    grad_output,
+                                                    stride=ctx.stride,
+                                                    padding=ctx.padding,
+                                                    dilation=ctx.dilation,
+                                                    groups=ctx.groups)
 
-        return None, dw.reshape(co, ci, nw, nw), None, None, None, None, None, None
+        dw = None
+        if ctx.needs_input_grad[1]:
+            nw = weight.shape[2]
+            _, ps = eX.shape
+            b, ci, nx, ny = ctx.xshape
+            co = grad_output.shape[1]
+
+            offs = offsets2d((nx, ny), nw)
+            delta = dilate2d(grad_output, co, (nx, ny), b, ctx.stride)
+            dw = back_probe(seed, nx*ny, ci, co, b, ps, nw**2, offs, delta, eX)
+            dw = dw.reshape(co, ci, nw, nw)
+
+        return dx, dw, None, None, None, None, None, None
 
 
 class Xconv3D(torch.autograd.Function):
@@ -79,6 +95,9 @@ class Xconv3D(torch.autograd.Function):
 
         ctx.xshape = input.shape
         ctx.stride = stride
+        ctx.dilation = dilation
+        ctx.groups = groups
+        ctx.padding = padding
         ctx.save_for_backward(eX, seed, weight, bias)
 
         with torch.no_grad():
@@ -88,12 +107,26 @@ class Xconv3D(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         eX, seed, weight, bias = ctx.saved_tensors
-        nw = weight.shape[2]
-        _, ps = eX.shape
-        b, ci, nx, ny, nz = ctx.xshape
-        co = grad_output.shape[1]
 
-        offs = offsets3d((nx, ny, nz), nw)
-        delta = dilate3d(grad_output, co, (nx, ny, nz), b, ctx.stride)
-        dw = back_probe(seed, nx*ny*nz, ci, co, b, ps, nw**3, offs, delta, eX)
-        return None, dw.reshape(co, ci, nw, nw, nw), None, None, None, None, None, None
+        dx = None
+        if ctx.needs_input_grad[0]:
+            dx = torch.nn.grad.conv3d_input(ctx.xshape, weight,
+                                                    grad_output,
+                                                    stride=ctx.stride,
+                                                    padding=ctx.padding,
+                                                    dilation=ctx.dilation,
+                                                    groups=ctx.groups)
+
+        dw = None
+        if ctx.needs_input_grad[1]:
+            nw = weight.shape[2]
+            _, ps = eX.shape
+            b, ci, nx, ny, nz = ctx.xshape
+            co = grad_output.shape[1]
+
+            offs = offsets3d((nx, ny, nz), nw)
+            delta = dilate3d(grad_output, co, (nx, ny, nz), b, ctx.stride)
+            dw = back_probe(seed, nx*ny*nz, ci, co, b, ps, nw**3, offs, delta, eX)
+            dw = dw.reshape(co, ci, nw, nw, nw)
+
+        return dx, dw, None, None, None, None, None, None

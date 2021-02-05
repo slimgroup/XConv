@@ -10,7 +10,7 @@ if __name__ == "__main__":
     cc = 1
     # c = Xconv2D(cc, cc, (3, 3), bias=False, ps=32, stride=1, padding=1)
     # c2 = nn.Conv2d(cc, cc, (3, 3), bias=False, padding=1, stride=1)
- 
+
     c = Xconv3D(cc, cc, (3, 3, 3), bias=False, ps=32, stride=1, padding=1)
     c2 = nn.Conv3d(cc, cc, (3, 3, 3), bias=False, padding=1, stride=1)
 
