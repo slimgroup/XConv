@@ -12,8 +12,8 @@ from xconv import Xconv2D
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = Xconv2D(1, 32, 3, 8, 1, padding=1)
-        self.conv2 = Xconv2D(32, 64, 3, 16, 1, padding=1)
+        self.conv1 = Xconv2D(1, 32, 3, 32, 1, padding=1)
+        self.conv2 = Xconv2D(32, 64, 3, 32, 1, padding=1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
         self.fc1 = nn.Linear(12544, 128)
@@ -112,7 +112,7 @@ def main():
 
     transform=transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        #transforms.Normalize((0.1307,), (0.3081,))
         ])
     dataset1 = datasets.MNIST('../data', train=True, download=True,
                        transform=transform)
@@ -126,6 +126,9 @@ def main():
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
+        if epoch%4 == 0:
+            model.conv1.ps *=2 
+            model.conv2.ps *=2
         train(args, model, device, train_loader, optimizer, epoch)
         test(model, device, test_loader)
         scheduler.step()

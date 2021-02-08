@@ -1,21 +1,40 @@
 import torch
 import torch.nn.functional as F
 
+import opt_einsum as oe
 from typing import List
 
 from pyxconv.utils import *
 
-@torch.jit.script
-def back_probe(seed: int, N: int, ci: int, co: int,
-               b: int, ps: int, nw: int, offs: List[int],
-               grad_output, eX):
+
+#@torch.jit.script
+def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
+              offs: List[int], grad_output, eX):
+    """
+    Backward pass of probing-based convolution filter gradient.
+
+    Arguments:
+        seed (int): Random seed for probing vectors
+        N (int): Number of pixels
+        ci (int): Number of input channels
+        co (int): Number of output channels
+        b (int): Batch size
+        ps (int): Number of probing vectors
+        nw (int): Convolution filter width (nw in each direction)
+        offs (List): List of offsets for the convolution filter coefficients
+        grad_output (Tensor): Backward input
+        eX (Tensor): Forward pass probed Tensor (b x ps)
+
+    Returns:
+        gradient w.r.t convolution filter
+    """
     # Redraw e
     torch.random.manual_seed(seed)
-    e = torch.randn(ci, N, ps, device=eX.device).permute(0, 2, 1)
+    e = torch.randn(ci, N, ps, device=eX.device)
 
     # Y' X e
     Ye = grad_output.reshape(b, -1)
-    LRe = torch.mm(eX.T, Ye)
+    LRe = torch.mm(eX.t(), Ye)
 
     # Init gradien
     grad_weight = torch.zeros(co, ci, nw, device=eX.device)
@@ -24,16 +43,27 @@ def back_probe(seed: int, N: int, ci: int, co: int,
     se = offs[-1]
     eend = N - se
     # LRE as ncho x (N x ps)
-    LRe = torch.narrow(LRe.reshape(ps, co, N), 2, se, eend-se).permute(1, 0, 2).reshape(co, -1).t()
+    LRe = LRe.reshape(ps, co, N).narrow(2, se, eend-se)
     for i, o in enumerate(offs):
-        torch.mm(torch.narrow(e, 2, se+o, eend-se).reshape(ci, -1), LRe, out=grad_weight[:, :, i])
-    return grad_weight.permute(1,0,2)/ps
+        ev = e.narrow(1, se+o, eend-se)
+        grad_weight[:, :, i] = oe.contract('bjk, lkb -> jl', LRe, ev)
+    return grad_weight/ps
 
 
 @torch.jit.script
-def fwd_probe(ps: int, X):
+def fwd_probe(ps: int, ci: int, N: int, X):
+    """
+    Forward pass of probing-based convolution filter gradient.
+    
+    Arguments:
+        ps (int): Number of probing vectors
+        X (Tensor): Layer's input Tensor
+
+    Returns:
+        eX (Tensor): Probed input tensor to be saved for backward pass
+    """
     Xv = X.reshape(X.shape[0], -1)
-    e = torch.randn(Xv.shape[1], ps, device=X.device)
+    e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
     eX = torch.mm(Xv, e)
     return eX
 
@@ -44,7 +74,8 @@ class Xconv2D(torch.autograd.Function):
     def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0, dilation=1, groups=1):
         seed = torch.randint(100000, (1,))
         torch.random.manual_seed(seed)
-        eX = fwd_probe(ps, input)
+        b, ci, nx, ny = input.shape
+        eX = fwd_probe(ps, ci, nx*ny, input)
 
         ctx.xshape = input.shape
         ctx.stride = stride
@@ -91,7 +122,8 @@ class Xconv3D(torch.autograd.Function):
     def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0, dilation=1, groups=1):
         seed = torch.randint(100000, (1,))
         torch.random.manual_seed(seed)
-        eX = fwd_probe(ps, input)
+        b, ci, nx, ny, nz = input.shape
+        eX = fwd_probe(ps, ci, nx*ny*nz, input)
 
         ctx.xshape = input.shape
         ctx.stride = stride
