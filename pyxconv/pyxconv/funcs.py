@@ -84,8 +84,7 @@ class Xconv2D(torch.autograd.Function):
         ctx.padding = padding
         ctx.save_for_backward(eX, seed, weight, bias)
 
-        with torch.no_grad():
-            Y = F.conv2d(input, weight, bias=bias, stride=stride, padding=padding, groups=groups)
+        Y = F.conv2d(input, weight, bias=bias, stride=stride, padding=padding, groups=groups)
         return Y
 
     @staticmethod
@@ -113,7 +112,11 @@ class Xconv2D(torch.autograd.Function):
             dw = back_probe(seed, nx*ny, ci, co, b, ps, nw**2, offs, delta, eX)
             dw = dw.reshape(co, ci, nw, nw)
 
-        return dx, dw, None, None, None, None, None, None
+        db = None
+        if bias is not None and ctx.needs_input_grad[3]:
+            db = grad_output.sum((0, 2, 3)).squeeze(0)
+        
+        return dx, dw, None, db, None, None, None, None
 
 
 class Xconv3D(torch.autograd.Function):
@@ -132,8 +135,7 @@ class Xconv3D(torch.autograd.Function):
         ctx.padding = padding
         ctx.save_for_backward(eX, seed, weight, bias)
 
-        with torch.no_grad():
-            Y = F.conv3d(input, weight, bias=bias, stride=stride, padding=padding, groups=groups)
+        Y = F.conv3d(input, weight, bias=bias, stride=stride, padding=padding, groups=groups)
         return Y
 
     @staticmethod
@@ -161,4 +163,8 @@ class Xconv3D(torch.autograd.Function):
             dw = back_probe(seed, nx*ny*nz, ci, co, b, ps, nw**3, offs, delta, eX)
             dw = dw.reshape(co, ci, nw, nw, nw)
 
-        return dx, dw, None, None, None, None, None, None
+        db = None
+        if bias is not None and ctx.needs_input_grad[3]:
+            db = grad_output.sum((0, 2, 3, 4)).squeeze(0)
+        
+        return dx, dw, None, db, None, None, None, None
