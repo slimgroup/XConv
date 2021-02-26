@@ -28,25 +28,26 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     Returns:
         gradient w.r.t convolution filter
     """
-    # Redraw e
-    torch.random.manual_seed(seed)
-    e = torch.randn(ci, N, ps, device=eX.device)
+    with torch.autograd.grad_mode.no_grad():
+        # Redraw e
+        torch.random.manual_seed(seed)
+        e = torch.randn(ci, N, ps, device=eX.device)
 
-    # Y' X e
-    Ye = grad_output.reshape(b, -1)
-    LRe = torch.mm(eX.t(), Ye)
+        # Y' X e
+        Ye = grad_output.reshape(b, -1)
+        LRe = torch.mm(eX.t(), Ye)
 
-    # Init gradien
-    grad_weight = torch.zeros(co, ci, nw, device=eX.device)
+        # Init gradien
+        grad_weight = torch.zeros(co, ci, nw, device=eX.device)
 
-    # Loop over offsets (can be improved later on)
-    se = offs[-1]
-    eend = N - se
-    # LRE as ncho x (N x ps)
-    LRe = LRe.reshape(ps, co, N).narrow(2, se, eend-se)
-    for i, o in enumerate(offs):
-        ev = e.narrow(1, se+o, eend-se)
-        grad_weight[:, :, i] = oe.contract('bjk, lkb -> jl', LRe, ev)
+        # Loop over offsets (can be improved later on)
+        se = offs[-1]
+        eend = N - se
+        # LRE as ncho x (N x ps)
+        LRe = LRe.reshape(ps, co, N).narrow(2, se, eend-se)
+        for i, o in enumerate(offs):
+            ev = e.narrow(1, se+o, eend-se)
+            grad_weight[:, :, i] = oe.contract('bjk, lkb -> jl', LRe, ev)
     return grad_weight/ps
 
 
@@ -62,9 +63,10 @@ def fwd_probe(ps: int, ci: int, N: int, X):
     Returns:
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
-    Xv = X.reshape(X.shape[0], -1)
-    e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
-    eX = torch.mm(Xv, e)
+    with torch.autograd.grad_mode.no_grad():
+        Xv = X.reshape(X.shape[0], -1)
+        e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
+        eX = torch.mm(Xv, e)
     return eX
 
 
@@ -82,10 +84,14 @@ class Xconv2D(torch.autograd.Function):
         ctx.dilation = dilation
         ctx.groups = groups
         ctx.padding = padding
-        ctx.save_for_backward(eX, seed, weight, bias)
 
-        Y = F.conv2d(input, weight, bias=bias, stride=stride, padding=padding, groups=groups)
-        return Y
+        with torch.autograd.grad_mode.no_grad():
+            Y = F.conv2d(input, weight, bias=bias, stride=stride, padding=padding, groups=groups)
+        
+        ctx.save_for_backward(eX, seed, weight, bias)
+        
+        with torch.autograd.grad_mode.no_grad():
+            return Y
 
     @staticmethod
     def backward(ctx, grad_output):
