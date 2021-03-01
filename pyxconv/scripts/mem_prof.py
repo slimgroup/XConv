@@ -6,7 +6,19 @@ import nvidia_smi
 from pyxconv import *
 import sys
 
-#torch.set_deterministic(True)
+class Model(nn.Module):
+    def __init__(self, N, mode, cc, ps=8):
+        super(Model, self).__init__()
+        self.N = N
+        self.conv =  Xconv2D(cc, cc, (3, 3), bias=False, ps=ps, stride=1, padding=1)
+        if mode == "true":
+            self.conv = nn.Conv2d(cc, cc, (3, 3), bias=False, padding=1, stride=1)
+        
+    def forward(self, x):
+        out = self.conv(x)
+        for l in range(1, self.N):
+            out = self.conv(out)
+        return nn.ReLU()(out)
 
 if __name__ == "__main__":
     cc = 16
@@ -16,16 +28,10 @@ if __name__ == "__main__":
         mode = int(sys.argv[1])
     except:
         mode = 1
-    print(mode, mode==1)
-    c = Xconv2D(cc, cc, (3, 3), bias=False, ps=32, stride=1, padding=1).to(device)
-    if mode != 1:
-        c = nn.Conv2d(cc, cc, (3, 3), bias=False, padding=1, stride=1).to(device)
     mode = "probe" if mode == 1 else "true"
-    #c = Xconv3D(cc, cc, (3, 3, 3), bias=False, ps=32, stride=1, padding=1).to(device)
-    #c2 = nn.Conv3d(cc, cc, (3, 3, 3), bias=False, padding=1, stride=1).to(device)
 
+    c = Model(3, mode, cc).to(device)
 
-    c = nn.Sequential(c, c, c, c)
     print("Network", c)
     nvidia_smi.nvmlInit()
     handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
@@ -44,4 +50,4 @@ if __name__ == "__main__":
         print(f'GPU usage {mode} after backward: mem: {100 * (mem.used / mem.total):.3f}%, abs-mem: {mem.used / (1024**3)} (GiB)') 
     print('\n \n \n')
     prof.export_chrome_trace(f"trace{mode}.json")
-    #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+    print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))

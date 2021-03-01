@@ -3,6 +3,7 @@ from typing import Tuple
 
 __all__ = ['dilate2d', 'dilate3d', 'offsets2d', 'offsets3d']
 
+
 @torch.jit.script
 def dilate2d(y, co: int, N: Tuple[int, int], b: int, stride: Tuple[int, int]):
     sx, sy = stride
@@ -21,7 +22,6 @@ def dilate3d(y, co: int, N: Tuple[int, int, int], b: int, stride: Tuple[int, int
     yd = torch.zeros(b, co, *N, device=y.device)
     yd[:, :, ::sx, ::sy, ::sz] = y
     return yd
-
 
 
 def offsets3d(N: Tuple[int, int, int], nw: int):
