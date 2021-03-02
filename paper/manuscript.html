@@ -57,15 +57,52 @@
 <li>Lessons learned from PDE adjoint state</li>
 </ul>
 <h2 id="theory">Theory</h2>
-<p>The backpropagation through a convolution layer is the correlation between the layer input <span class="math scholmd-math-inline">\(X\)</span> and the backpropagated residual <span class="math scholmd-math-inline">\(\Delta\)</span>. 
+<p>We consider a one dimensional for simplicity, but the following derivation stands in any number of dimensions considering the vectorized version of the images. To turn weights the convolution weights <span class="math scholmd-math-inline">\(w\)</span> of size <span class="math scholmd-math-inline">\(k\)</span> into linear convolution operator: 
 <span class="math scholmd-math-display" style="display: block;">\[
 \begin{equation}
-    \delta W[i,j] = X_{i,j}^* \Delta
-\label{grad_im2col}
+\begin{split}
+    W = \mathcal{D} w \\
+    \mathcal{D}  = [D_{-k} \ D_{-k+1} \ ... D_{0} \ ... \ D_{k-1} \ D_{k}] 
+\end{split}
+\label{LAconv}
 \end{equation}
 \]</span>
- where <span class="math scholmd-math-inline">\(X_{i,j}\)</span> is <span class="math scholmd-math-inline">\(X\)</span> shifted by <span class="math scholmd-math-inline">\(i, j\)</span> in the image space (<span class="math scholmd-math-inline">\(X[x-i, y-j, C, B]\)</span>). This correlation is conventionally implemented with the <em>im2col+gemm</em> algorithm. While computationnaly extremely optimized and efficient, these implementation rely on costly memory layout transofrmation or implisic non-uniform indexing that do not necessarily scale for either large images or large batch sizes.</p>
-<p>These correlations can be reformulated as the extraction of the diagonal and off-diagonal traces of the outer product of <span class="math scholmd-math-inline">\(X\)</span> with <span class="math scholmd-math-inline">\(\Delta\)</span> at the offsets corresponding to the kernel indices.For example, the diagonals corresponding to a 3x3 convolution are at offsets <span class="math scholmd-math-inline">\([-N_x-1, -N_x, -N_x+1, -1, 0, 1, N_x-1, N_x, N_x+1]\)</span>. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise, probing techniques <a href="#refs">refs</a> proved an unbiased estimate of the traces that only requires matrix-vector products. This unbiased estimator is defined as: 
+ where <span class="math scholmd-math-inline">\(D_{i}\)</span> is the diagonal operator, ie. <span class="math scholmd-math-inline">\(D_{i} x\)</span> is the matrix with <span class="math scholmd-math-inline">\(x\)</span> on its <span class="math scholmd-math-inline">\(i^{th}\)</span> diagonal. A convolution layer, despite its name, is a correlation operation, i.e, the adjoint of a convolution. Therefore, we can write: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+y = \text{conv}(w, x) = W^\top x = w^\top \mathcal{D}^\top x
+\label{LAconvX}
+\end{equation}
+\]</span>
+ which as expected from a convolution is linear with respect to <span class="math scholmd-math-inline">\(x\)</span> on the right and <span class="math scholmd-math-inline">\(w\)</span> on the left. With this linear definition of the convolution, the derivative is straightforward, and for a back propagated residual <span class="math scholmd-math-inline">\(\Delta y\)</span> the gradient with respect to <span class="math scholmd-math-inline">\(w\)</span> is 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+\begin{aligned}
+ \delta w = \frac{d \ \text{conv(w, x)}}{d w} &amp;= \Delta y \frac{d y}{d w} \\
+  &amp;=\Delta y \frac{d \ w^\top \mathcal{D}^\top x}{d w} \\
+  &amp;= \Delta y \ x^\top \mathcal{D}
+\end{aligned}
+\label{dwla}
+\end{equation}
+\]</span>
+ which does correspond to the conventional machine learning definition <span class="math scholmd-math-inline">\(δ w = \text{conv\_transpose}(x, \Delta y)\)</span> which in this case is a convolution since <span class="math scholmd-math-inline">\(\text{conv}\)</span> is a correlation. We can easily rewrite this derivative as the transpose of its transpose since <span class="math scholmd-math-inline">\(X^\top \top = X\)</span>: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+\begin{split}
+\delta w = ( \mathcal{D}^\top \ x \ \Delta y\top)^\top \\
+\mathcal{D}^\top = \begin{bmatrix} D_{-k}^\top \\ D_{-k+1}^\top \\ ... \\ D_{0}^\top \\ ... \\ D_{k-1}^\top \\ D_{k}^\top\end{bmatrix}.
+\end{split}
+\label{dwT}
+\end{equation}
+\]</span>
+ and because each <span class="math scholmd-math-inline">\(D_{i}\)</span> is the diagonal operator their adjoint is the trace operator shifted by <span class="math scholmd-math-inline">\(i\)</span> i.e summing the values of the <span class="math scholmd-math-inline">\(i^{th}\)</span> diagonal, we have the gradient of a convolution as the traces of a huge matrix that is the outer product of the input and backpropagated residual: 
+<span class="math scholmd-math-display" style="display: block;">\[
+\begin{equation}
+  \delta w = \text{tr}(x \ \Delta y\top, -k:k)^\top.
+\label{dwtr}
+\end{equation}
+\]</span>
+ where <span class="math scholmd-math-inline">\(\text{tr}(X, \text{inds})\)</span> takes each trace at the diagonal indexed by <span class="math scholmd-math-inline">\(\text{inds}\)</span>. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise we can obtain an unbiased estimate of the trace via matrix probing techniques <a href="#refs">refs</a>. These methods are designed to estimate the diagonals and traces of matrixes that are either too big to be explicitly formed, or in general for linear operator that are only accessible via their acation. THese linear operator are usually implemented in a mtrix-free framework (sPOT, pyops, …) only allowing their action instead of their value. This unbiased estimate of the traces is then obtain via repeated left and right matrix-vector products on carefully chosen random vectors. This unbiased estimator is defined as: 
 <span class="math scholmd-math-display" style="display: block;">\[
 \begin{equation}
 \begin{aligned}

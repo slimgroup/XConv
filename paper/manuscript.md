@@ -56,15 +56,43 @@ bonjour
 
 ## Theory
 
-The backpropagation through a convolution layer is the correlation between the layer input ``X`` and the backpropagated residual ``\Delta``.
+We consider a one dimensional for simplicity, but the following derivation stands in any number of dimensions considering the vectorized version of the images. To turn weights the convolution weights ``w`` of size ``k`` into linear convolution operator:
 
-```math {#grad_im2col}
-    \delta W[i,j] = X_{i,j}^* \Delta
+```math {#LAconv}
+    W = \mathcal{D} w \\
+    \mathcal{D}  = [D_{-k} \ D_{-k+1} \ ... D_{0} \ ... \ D_{k-1} \ D_{k}] 
 ```
 
-where ``X_{i,j}`` is ``X`` shifted by ``i, j`` in the image space (``X[x-i, y-j, C, B]``). This correlation is conventionally implemented with the *im2col+gemm* algorithm. While computationnaly extremely optimized and efficient, these implementation rely on costly memory layout transofrmation or implisic non-uniform indexing that do not necessarily scale for either large images or large batch sizes.
+where ``D_{i}`` is the diagonal operator, ie. ``D_{i} x`` is the matrix with ``x`` on its ``i^{th}`` diagonal. A convolution layer, despite its name, is a correlation operation, i.e, the adjoint of a convolution. Therefore, we can write:
 
-These correlations can be reformulated as the extraction of the diagonal and off-diagonal traces of the outer product of ``X`` with ``\Delta`` at the offsets corresponding to the kernel indices.For example, the diagonals corresponding to a 3x3 convolution are at offsets ``[-N_x-1, -N_x, -N_x+1, -1, 0, 1, N_x-1, N_x, N_x+1]``. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise, probing techniques [refs] proved an unbiased estimate of the traces that only requires matrix-vector products. This unbiased estimator is defined as:
+```math {#LAconvX}
+y = \text{conv}(w, x) = W^\top x = w^\top \mathcal{D}^\top x
+```
+
+which as expected from a convolution is linear with respect to ``x`` on the right and ``w`` on the left. With this linear definition of the convolution, the derivative is straightforward, and for a back propagated residual ``\Delta y`` the gradient with respect to ``w`` is
+
+```math {#dwla}
+
+ \delta w = \frac{d \ \text{conv(w, x)}}{d w} &= \Delta y \frac{d y}{d w} \\
+  &=\Delta y \frac{d \ w^\top \mathcal{D}^\top x}{d w} \\
+  &= \Delta y \ x^\top \mathcal{D}
+
+```
+
+which does correspond to the conventional machine learning definition ``δ w = \text{conv\_transpose}(x, \Delta y)`` which in this case is a convolution since ``\text{conv}`` is a correlation. We can easily rewrite this derivative as the transpose of its transpose since ``X^\top \top = X``: 
+
+```math {#dwT}
+\delta w = ( \mathcal{D}^\top \ x \ \Delta y\top)^\top \\
+\mathcal{D}^\top = \begin{bmatrix} D_{-k}^\top \\ D_{-k+1}^\top \\ ... \\ D_{0}^\top \\ ... \\ D_{k-1}^\top \\ D_{k}^\top\end{bmatrix}.
+```
+
+and because each ``D_{i}`` is the diagonal operator their adjoint is the trace operator shifted by ``i`` i.e summing the values of the ``i^{th}`` diagonal, we have the gradient of a convolution as the traces of a huge matrix that is the outer product of the input and backpropagated residual:
+
+```math {#dwtr}
+  \delta w = \text{tr}(x \ \Delta y\top, -k:k)^\top.
+```
+
+where ``\text{tr}(X, \text{inds})`` takes each trace at the diagonal indexed by ``\text{inds}``.  While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise we can obtain an unbiased estimate of the trace via matrix probing techniques [refs]. These methods are designed to estimate the diagonals and traces of matrixes that are either too big to be explicitly formed, or in general for linear operator that are only accessible via their acation. THese linear operator are usually implemented in a mtrix-free framework (sPOT, pyops, ...) only allowing their action instead of their value. This unbiased estimate of the traces is then obtain via repeated left and right matrix-vector products on carefully chosen random vectors. This unbiased estimator is defined as:
 
 ```math {#grad_ev}
     \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z_{i,j}^* \tilde{X} \tilde{\Delta}^* z \\
