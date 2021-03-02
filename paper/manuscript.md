@@ -69,27 +69,27 @@ where ``D_{i}`` is the diagonal operator, ie. ``D_{i} x`` is the matrix with ``x
 y = \text{conv}(w, x) = W^\top x = w^\top \mathcal{D}^\top x
 ```
 
-which as expected from a convolution is linear with respect to ``x`` on the right and ``w`` on the left. With this linear definition of the convolution, the derivative is straightforward, and for a back propagated residual ``\Delta y`` the gradient with respect to ``w`` is
+which as expected from a convolution is linear with respect to ``x`` on the right and ``w`` on the left. With this linear definition of the convolution, the derivative of a given loss function ``L`` on the convolution is straightforward. The gradient with respect to ``w`` is
 
 ```math {#dwla}
 
- \delta w = \frac{d \ \text{conv(w, x)}}{d w} &= \Delta y \frac{d y}{d w} \\
-  &=\Delta y \frac{d \ w^\top \mathcal{D}^\top x}{d w} \\
-  &= \Delta y \ x^\top \mathcal{D}
+ \delta w = \frac{d \ \text{L(y)}}{d w} &= \frac{d L}{dy} \frac{d y}{d w} \\
+  &= dy \frac{d \ w^\top \mathcal{D}^\top x}{d w} \\
+  &= dy \ x^\top \mathcal{D}
 
 ```
 
-which does correspond to the conventional machine learning definition ``δ w = \text{conv\_transpose}(x, \Delta y)`` which in this case is a convolution since ``\text{conv}`` is a correlation. We can easily rewrite this derivative as the transpose of its transpose since ``X^\top \top = X``: 
+which does correspond to the conventional machine learning definition ``δ w = \text{conv_transpose}(x, dy)`` which in this case is a convolution since ``\text{conv}`` is a correlation. We can easily rewrite this derivative as the transpose of its transpose since ``X^{\top^\top} = X``: 
 
 ```math {#dwT}
-\delta w = ( \mathcal{D}^\top \ x \ \Delta y\top)^\top \\
+\delta w = ( \mathcal{D}^\top \ x \ dy^\top)^\top \\
 \mathcal{D}^\top = \begin{bmatrix} D_{-k}^\top \\ D_{-k+1}^\top \\ ... \\ D_{0}^\top \\ ... \\ D_{k-1}^\top \\ D_{k}^\top\end{bmatrix}.
 ```
 
 and because each ``D_{i}`` is the diagonal operator their adjoint is the trace operator shifted by ``i`` i.e summing the values of the ``i^{th}`` diagonal, we have the gradient of a convolution as the traces of a huge matrix that is the outer product of the input and backpropagated residual:
 
 ```math {#dwtr}
-  \delta w = \text{tr}(x \ \Delta y\top, -k:k)^\top.
+  \delta w = \text{tr}(x \ dy^\top, -k:k)^\top.
 ```
 
 where ``\text{tr}(X, \text{inds})`` takes each trace at the diagonal indexed by ``\text{inds}``.  While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise we can obtain an unbiased estimate of the trace via matrix probing techniques [refs]. These methods are designed to estimate the diagonals and traces of matrixes that are either too big to be explicitly formed, or in general for linear operator that are only accessible via their acation. THese linear operator are usually implemented in a mtrix-free framework (sPOT, pyops, ...) only allowing their action instead of their value. This unbiased estimate of the traces is then obtain via repeated left and right matrix-vector products on carefully chosen random vectors. This unbiased estimator is defined as:

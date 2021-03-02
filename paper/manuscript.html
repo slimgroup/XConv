@@ -74,22 +74,22 @@ y = \text{conv}(w, x) = W^\top x = w^\top \mathcal{D}^\top x
 \label{LAconvX}
 \end{equation}
 \]</span>
- which as expected from a convolution is linear with respect to <span class="math scholmd-math-inline">\(x\)</span> on the right and <span class="math scholmd-math-inline">\(w\)</span> on the left. With this linear definition of the convolution, the derivative is straightforward, and for a back propagated residual <span class="math scholmd-math-inline">\(\Delta y\)</span> the gradient with respect to <span class="math scholmd-math-inline">\(w\)</span> is 
+ which as expected from a convolution is linear with respect to <span class="math scholmd-math-inline">\(x\)</span> on the right and <span class="math scholmd-math-inline">\(w\)</span> on the left. With this linear definition of the convolution, the derivative of a given loss function <span class="math scholmd-math-inline">\(L\)</span> on the convolution is straightforward. The gradient with respect to <span class="math scholmd-math-inline">\(w\)</span> is 
 <span class="math scholmd-math-display" style="display: block;">\[
 \begin{equation}
 \begin{aligned}
- \delta w = \frac{d \ \text{conv(w, x)}}{d w} &amp;= \Delta y \frac{d y}{d w} \\
-  &amp;=\Delta y \frac{d \ w^\top \mathcal{D}^\top x}{d w} \\
-  &amp;= \Delta y \ x^\top \mathcal{D}
+ \delta w = \frac{d \ \text{L(y)}}{d w} &amp;= \frac{d L}{dy} \frac{d y}{d w} \\
+  &amp;= dy \frac{d \ w^\top \mathcal{D}^\top x}{d w} \\
+  &amp;= dy \ x^\top \mathcal{D}
 \end{aligned}
 \label{dwla}
 \end{equation}
 \]</span>
- which does correspond to the conventional machine learning definition <span class="math scholmd-math-inline">\(δ w = \text{conv\_transpose}(x, \Delta y)\)</span> which in this case is a convolution since <span class="math scholmd-math-inline">\(\text{conv}\)</span> is a correlation. We can easily rewrite this derivative as the transpose of its transpose since <span class="math scholmd-math-inline">\(X^\top \top = X\)</span>: 
+ which does correspond to the conventional machine learning definition <span class="math scholmd-math-inline">\(δ w = \text{conv_transpose}(x, dy)\)</span> which in this case is a convolution since <span class="math scholmd-math-inline">\(\text{conv}\)</span> is a correlation. We can easily rewrite this derivative as the transpose of its transpose since <span class="math scholmd-math-inline">\(X^{\top^\top} = X\)</span>: 
 <span class="math scholmd-math-display" style="display: block;">\[
 \begin{equation}
 \begin{split}
-\delta w = ( \mathcal{D}^\top \ x \ \Delta y\top)^\top \\
+\delta w = ( \mathcal{D}^\top \ x \ dy^\top)^\top \\
 \mathcal{D}^\top = \begin{bmatrix} D_{-k}^\top \\ D_{-k+1}^\top \\ ... \\ D_{0}^\top \\ ... \\ D_{k-1}^\top \\ D_{k}^\top\end{bmatrix}.
 \end{split}
 \label{dwT}
@@ -98,7 +98,7 @@ y = \text{conv}(w, x) = W^\top x = w^\top \mathcal{D}^\top x
  and because each <span class="math scholmd-math-inline">\(D_{i}\)</span> is the diagonal operator their adjoint is the trace operator shifted by <span class="math scholmd-math-inline">\(i\)</span> i.e summing the values of the <span class="math scholmd-math-inline">\(i^{th}\)</span> diagonal, we have the gradient of a convolution as the traces of a huge matrix that is the outer product of the input and backpropagated residual: 
 <span class="math scholmd-math-display" style="display: block;">\[
 \begin{equation}
-  \delta w = \text{tr}(x \ \Delta y\top, -k:k)^\top.
+  \delta w = \text{tr}(x \ dy^\top, -k:k)^\top.
 \label{dwtr}
 \end{equation}
 \]</span>
