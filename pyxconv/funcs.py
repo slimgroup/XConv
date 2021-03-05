@@ -1,12 +1,13 @@
 import torch
 import torch.nn.functional as F
 
-from typing import List
+from typing import List, Tuple
+import opt_einsum as oe
 
 from pyxconv.utils import *
 
 
-@torch.jit.script
+#@torch.jit.script
 def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
                offs: List[int], grad_output, eX):
     """
@@ -32,7 +33,7 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     e = torch.randn(ci, N, ps, device=eX.device)
 
     # Y' X e
-    Ye = grad_output.reshape(b, -1)
+    Ye = grad_output.view(b, -1)
     LRe = torch.mm(eX.t(), Ye)
 
     # Init gradien
@@ -42,10 +43,12 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     se = offs[-1]
     eend = N - se
     # LRE as ncho x (N x ps)
-    LRe = LRe.reshape(ps, co, N).narrow(2, se, eend-se)
+    LRe = LRe.view(ps, co, N).narrow(2, se, eend-se)
     for i, o in enumerate(offs):
         ev = e.narrow(1, se+o, eend-se)
-        grad_weight[:, :, i] = torch.einsum('bjk, lkb -> jl', LRe, ev)
+        expr = oe.contract_expression("bjk,lkb", LRe.shape, ev.shape)
+        grad_weight[:, :, i] = expr(LRe, ev, backend='torch')
+        #grad_weight[:, :, i] = torch.einsum('bjk, lkb -> jl', LRe, ev)
     return grad_weight/ps
 
 
@@ -63,7 +66,8 @@ def fwd_probe(ps: int, ci: int, N: int, X):
     """
     Xv = X.reshape(X.shape[0], -1)
     e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
-    eX = torch.mm(Xv, e)
+    eX = torch.empty(X.shape[0], ps, device=X.device)
+    torch.mm(Xv, e, out=eX)
 
     return eX
 
@@ -98,12 +102,6 @@ class Xconv2D(torch.autograd.Function):
     def backward(ctx, grad_output):
         eX, seed, weight, bias = ctx.saved_tensors
 
-        dx = None
-        if ctx.needs_input_grad[0]:
-            dx = torch.nn.grad.conv2d_input(ctx.xshape, weight, grad_output,
-                                            stride=ctx.stride, padding=ctx.padding,
-                                            dilation=ctx.dilation, groups=ctx.groups)
-
         dw = None
         if ctx.needs_input_grad[1]:
             nw = weight.shape[2]
@@ -115,6 +113,12 @@ class Xconv2D(torch.autograd.Function):
             delta = dilate2d(grad_output, co, (nx, ny), b, ctx.stride)
             dw = back_probe(seed, nx*ny, ci, co, b, ps, nw**2, offs, delta, eX)
             dw = dw.reshape(co, ci, nw, nw)
+
+        dx = None
+        if ctx.needs_input_grad[0]:
+            dx = torch.nn.grad.conv2d_input(ctx.xshape, weight, grad_output,
+                                            stride=ctx.stride, padding=ctx.padding,
+                                            dilation=ctx.dilation, groups=ctx.groups)
 
         db = None
         if bias is not None and ctx.needs_input_grad[3]:
@@ -153,12 +157,6 @@ class Xconv3D(torch.autograd.Function):
     def backward(ctx, grad_output):
         eX, seed, weight, bias = ctx.saved_tensors
 
-        dx = None
-        if ctx.needs_input_grad[0]:
-            dx = torch.nn.grad.conv3d_input(ctx.xshape, weight, grad_output,
-                                            stride=ctx.stride, padding=ctx.padding,
-                                            dilation=ctx.dilation, groups=ctx.groups)
-
         dw = None
         if ctx.needs_input_grad[1]:
             nw = weight.shape[2]
@@ -170,6 +168,12 @@ class Xconv3D(torch.autograd.Function):
             delta = dilate3d(grad_output, co, (nx, ny, nz), b, ctx.stride)
             dw = back_probe(seed, nx*ny*nz, ci, co, b, ps, nw**3, offs, delta, eX)
             dw = dw.reshape(co, ci, nw, nw, nw)
+
+        dx = None
+        if ctx.needs_input_grad[0]:
+            dx = torch.nn.grad.conv3d_input(ctx.xshape, weight, grad_output,
+                                            stride=ctx.stride, padding=ctx.padding,
+                                            dilation=ctx.dilation, groups=ctx.groups)
 
         db = None
         if bias is not None and ctx.needs_input_grad[3]:
