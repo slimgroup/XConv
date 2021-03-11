@@ -41,11 +41,11 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
 
     # Loop over offsets (can be improved later on)
     se = offs[-1]
-    eend = N - se
+    eend = N - 2*se
     # LRE as ncho x (N x ps)
-    LRe = LRe.view(ps, co, N).narrow(2, se, eend-se)
+    LRe = LRe.view(ps, co, N) if N==1 else LRe.view(ps, co, N).narrow(2, se, eend)
     for i, o in enumerate(offs):
-        ev = e.narrow(1, se+o, eend-se)
+        ev = e if N==1 else e.narrow(1, se+o, eend)
         expr = oe.contract_expression("bjk,lkb", LRe.shape, ev.shape)
         grad_weight[:, :, i] = expr(LRe, ev, backend='torch')
         #grad_weight[:, :, i] = torch.einsum('bjk, lkb -> jl', LRe, ev)
@@ -68,7 +68,7 @@ def fwd_probe(ps: int, ci: int, N: int, X):
     e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
     eX = torch.empty(X.shape[0], ps, device=X.device)
     torch.mm(Xv, e, out=eX)
-
+    
     return eX
 
 
