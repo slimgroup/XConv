@@ -7,7 +7,7 @@ from torchvision.models import alexnet, vgg16, squeezenet1_1, resnet18
 from pyxconv import convert_net, Xconv2D, log_mem, plot_mem
 
 # %% Analysis baseline
-mode = resnet18
+mode = alexnet
 
 model = mode()
 
