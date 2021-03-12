@@ -4,23 +4,26 @@ from typing import Tuple
 __all__ = ['convert_net', 'dilate2d', 'dilate3d', 'offsets2d', 'offsets3d']
 
 
-def convert_net(module, name='net', ps=16):
+def convert_net(module, name='net', ps=16, mode='all'):
     """
     Recursively replaces all nn.Conv2d by XConv2D
 
     """
-    from .modules import Xconv2D
+    from .modules import Xconv2D, BReLU
     # iterate through immediate child modules. Note, the recursion is done by our code no need to use named_modules()
     for child_name, child in module.named_children():
-        if isinstance(child, torch.nn.Conv2d):
-            print('replaced: ', name, child_name)
+        if isinstance(child, torch.nn.Conv2d) and mode in ['all', 'conv']:
+            print(mode, 'replaced: ', name, child_name)
             newconv = Xconv2D(child.in_channels, child.out_channels,
                               child.kernel_size, ps=ps, stride=child.stride,
                               padding=child.padding)
             newconv.weight = child.weight
             setattr(module, child_name, newconv)
+        elif isinstance(child, torch.nn.ReLU) and mode in ['all', 'relu']:
+            print(mode, 'replaced: ', name, child_name) 
+            setattr(module, child_name, BReLU(inplace=child.inplace))
         else:
-            convert_net(child, child_name)
+            convert_net(child, child_name, ps=ps, mode=mode)
 
 
 @torch.jit.script

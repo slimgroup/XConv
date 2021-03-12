@@ -10,6 +10,7 @@ _triple = torch.nn.modules.utils._triple
 
 conv2d = pyxconv.funcs.Xconv2D.apply
 conv3d = pyxconv.funcs.Xconv3D.apply
+brelu = pyxconv.funcs.Brelu.apply
 
 
 class Xconv2D(torch.nn.modules.conv._ConvNd):
@@ -42,3 +43,10 @@ class Xconv3D(torch.nn.modules.conv._ConvNd):
     def forward(self, input):
         return conv3d(input, self.weight, self.ps, self.bias, self.stride,
                       self.padding, self.dilation, self.groups)
+
+class BReLU(torch.nn.ReLU):
+    def __init__(self, *args, **kwargs):
+        super(BReLU, self).__init__(*args, **kwargs)
+
+    def forward(self, input):
+        return brelu(input, self.inplace)

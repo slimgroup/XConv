@@ -25,6 +25,7 @@ def _generate_mem_hook(handle_ref, mem, idx, hook_type, exp):
         torch.cuda.synchronize()
         lname = type(self).__name__
         lname = 'conv' if 'conv' in lname.lower() else lname
+        lname = 'ReLU' if 'relu' in lname.lower() else lname
         mem.append({
             'layer_idx': idx,
             'call_idx': call_idx,
@@ -78,18 +79,20 @@ def plot_mem(
 ):
     if exps is None:
         exps = df.exp.drop_duplicates()
-    labels = {'baseline': 'Standard', 'baseline_p': 'Probed'}
+    labels = {'std': 'Standard', 'conv': 'Probed', 'relu': 'Probed+BReLU'}
     fig, ax = plt.subplots(figsize=(10, 10))
+
     layer_list = []
     for exp in exps:
         df_ = df[df.exp == exp]
+        print(exp, len(df_))
 
         if normalize_call_idx:
             df_.call_idx = df_.call_idx / df_.call_idx.max()
 
         if normalize_mem_all:
-            df_.mem_all = df_.mem_all - df_[df_.call_idx == df_.call_idx.min()].mem_all.iloc[0]
-            df_.mem_all = df_.mem_all / 2 ** 30
+            #mem_all = df_.mem_all - df_[df_.call_idx == df_.call_idx.min()].mem_all.iloc[0]
+            df_.mem_all /= 2 ** 30
 
         layer_idx = 0
         callidx_fwd = df_[(df_["layer_idx"] == layer_idx) & (df_["hook_type"] == "fwd")]["call_idx"].iloc[0]

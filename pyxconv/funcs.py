@@ -180,3 +180,17 @@ class Xconv3D(torch.autograd.Function):
             db = grad_output.sum((0, 2, 3, 4)).squeeze(0)
 
         return dx, dw, None, db, None, None, None, None
+
+class Brelu(torch.autograd.Function):
+    
+    @staticmethod
+    def forward(ctx, input, inplace=False):
+        ctx.save_for_backward(((torch.sign(input)+1)/2).byte())
+
+        with torch.autograd.grad_mode.no_grad():
+            return F.relu(input, inplace=inplace)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        binp, = ctx.saved_tensors
+        return torch.mul(grad_output, binp, out=grad_output), None
