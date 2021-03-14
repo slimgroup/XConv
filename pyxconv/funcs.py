@@ -185,12 +185,16 @@ class Brelu(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, input, inplace=False):
-        ctx.save_for_backward(((torch.sign(input)+1)/2).byte())
-
         with torch.autograd.grad_mode.no_grad():
-            return F.relu(input, inplace=inplace)
-
+            Y = F.relu(input, inplace=inplace)
+            sx = (Y > 0).byte()
+        ctx.save_for_backward(sx)
+        
+        return Y
+    
     @staticmethod
     def backward(ctx, grad_output):
         binp, = ctx.saved_tensors
-        return torch.mul(grad_output, binp, out=grad_output), None
+        if ctx.needs_input_grad[0]:
+            return grad_output*binp, None
+        return None, None

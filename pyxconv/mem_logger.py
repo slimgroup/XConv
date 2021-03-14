@@ -79,7 +79,7 @@ def plot_mem(
 ):
     if exps is None:
         exps = df.exp.drop_duplicates()
-    labels = {'std': 'Standard', 'conv': 'Probed', 'relu': 'Probed+BReLU'}
+    labels = {'std': 'Standard', 'relu': 'BReLU', 'conv': 'Probed', 'all': 'Probed+BReLU'}
     fig, ax = plt.subplots(figsize=(10, 10))
 
     layer_list = []
