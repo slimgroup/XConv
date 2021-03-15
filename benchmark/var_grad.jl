@@ -26,13 +26,13 @@ end
 
 n_in = 1
 n_out = 1
-nx = 28
-ny = 28
+nx = 32
+ny = 32
 
 diffgrad = Array{Any}(undef, 4, 6)
 
 close("all")
-for ps=4:4
+for ps=1:4
     fig, axs = subplots(3, 2, figsize=(10, 5), sharex=true, sharey=true)
     fig.suptitle("Gradient comparisons \n N=$(nx)x$(ny), nchi=$(3*n_in), ncho=$(3*n_out), prob_size=$(2^(ps+1))")
 
@@ -42,18 +42,19 @@ for ps=4:4
         n_bench = 5
         nw   = 3;
 
-        X, Y0 = getbatch_MNIST(batchsize, n_in, n_out)
+        # X, Y0 = getbatch_MNIST(batchsize, n_in, n_out)
+        X, Y0 = getbatch_CIFAR10(batchsize, n_in, n_out; gaussian=true)
         # Flux network
         C = Conv((nw, nw), 3*n_in=>3*n_out, identity;pad=1, stride=stride)
         w = C.weight
 
         XConv.initXConv(0, "TrueGrad")
-        @time g1 = gradient(w->.5*norm(conv(X, w;pad=1)- Y0), w)[1]
+        @time g1 = gradient(w->.5f0*norm(conv(X, w;pad=1) - Y0), w)[1]
 
         XConv.initXConv(2^(ps+1), "EVGrad")
-        @time g2 = gradient(w->.5*norm(conv(X, w;pad=1)- Y0), w)[1]
+        @time g2 = gradient(w->.5f0*norm(conv(X, w;pad=1) - Y0), w)[1]
         nn = 100
-        all_g = hcat([vec(gradient(w->.5*norm(conv(X, w;pad=1)- Y0), w)[1]) for i=1:nn]...)
+        all_g = hcat([vec(gradient(w->.5f0*norm(conv(X, w;pad=1)- Y0), w)[1]) for i=1:nn]...)
         gm2 = mean(all_g, dims=2)[:, 1]
         st = std(all_g; dims=2)[:, 1]
         qtl, qtr = qi(all_g, .95)

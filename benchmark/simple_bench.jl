@@ -19,11 +19,11 @@ ny = 64
 batchsize = 32
 n_in = 2
 n_out = 2
-stride = (2, 2)
+stride = (1, 1)
 nw   = 3;
 
 # Flux network
-C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride)
+C = Conv((nw, nw), 3*n_in=>3*n_out, identity;pad=1, stride=stride)
 
 batches = [2^k for k=0:8]
 
@@ -43,9 +43,9 @@ fig.suptitle("Conv layer gradient chi-$(n_in), cho-$(n_out)")
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    local X = randn(Float32, nx, ny, n_in, b)
-    local Y = C(X) - randn(Float32, div(nx, stride[1]), div(ny, stride[2]), n_out, b)
-    # local X, Y =  getbatch_CIFAR10(b, n_in, n_out)
+    # local X = randn(Float32, nx, ny, n_in, b)
+    # local Y = C(X) - randn(Float32, div(nx, stride[1]), div(ny, stride[2]), n_out, b)
+    local X, Y =  getbatch_CIFAR10(b, n_in, n_out; gaussian=true)
 
     cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 
@@ -63,11 +63,11 @@ for (i, b)=enumerate(batches)
     angles[i, 4] = dot(g23, g1)/(norm(g23)*norm(g1))
 
     # Benchmark runtime
-    tf[i] = @belapsed ∇conv_filter($X, $Y, $cdims) samples=2
-    t1[i] = @belapsed grad_ev($X, $Y, 5, $nw, $stride) samples=2
-    t10[i] = @belapsed grad_ev($X, $Y, 10, $nw, $stride) samples=2
-    t50[i] = @belapsed grad_ev($X, $Y, 50, $nw, $stride) samples=2
-    t100[i] = @belapsed grad_ev($X, $Y, 100, $nw, $stride) samples=2
+    # tf[i] = @belapsed ∇conv_filter($X, $Y, $cdims) samples=2
+    # t1[i] = @belapsed grad_ev($X, $Y, 5, $nw, $stride) samples=2
+    # t10[i] = @belapsed grad_ev($X, $Y, 10, $nw, $stride) samples=2
+    # t50[i] = @belapsed grad_ev($X, $Y, 50, $nw, $stride) samples=2
+    # t100[i] = @belapsed grad_ev($X, $Y, 100, $nw, $stride) samples=2
 
     # Plot result
     axsl[i].plot(vec(g20)/norm(g20, Inf), label="LR(s=5)", "-r")
@@ -81,16 +81,16 @@ lines, labels = fig.axes[end].get_legend_handles_labels()
 fig.legend(lines, labels, loc = "upper left")
 tight_layout()
 
-figure()
-title("10 Gradient computation speedup")
-plot(batches, tf, label="Flux")
-plot(batches,t1, label="LR(s=5)")
-plot(batches,t10, label="LR(s=10)")
-plot(batches,t50, label="LR(s=50)")
-plot(batches,t100, label="LR(s=100)")
-xlabel("Batch size")
-ylabel("Runtime(s)")
-legend()
+# figure()
+# title("10 Gradient computation speedup")
+# plot(batches, tf, label="Flux")
+# plot(batches,t1, label="LR(s=5)")
+# plot(batches,t10, label="LR(s=10)")
+# plot(batches,t50, label="LR(s=50)")
+# plot(batches,t100, label="LR(s=100)")
+# xlabel("Batch size")
+# ylabel("Runtime(s)")
+# legend()
 
 figure()
 title("Similarty x' x2 / (||x|| ||x2||)")
