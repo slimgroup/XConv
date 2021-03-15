@@ -56,76 +56,64 @@ bonjour
 
 ## Theory
 
-We consider a one dimensional for simplicity, but the following derivation stands in any number of dimensions considering the vectorized version of the images. To turn weights the convolution weights ``w`` of size ``k`` into linear convolution operator:
+Consider the standard convolution on an input ``\mathbf{x}`` with weights ``\mathbf{w}``. We can write the convolution in a linear algebra formulation as follows:
 
 ```math {#LAconv}
-    W = \mathcal{D} w \\
-    \mathcal{D}  = [D_{-k} \ D_{-k+1} \ ... D_{0} \ ... \ D_{k-1} \ D_{k}] 
+\mathbf{u} = \operatorname{conv}(\mathbf{x};\mathbf{w}) &= \left(\sum_{i=1}^{n_w}\operatorname{diag}(\mathbf{w}_i)\mathbf{T}_{k(i)}\right) \mathbf{x} \\
+& = \sum_{i=1}^{n_w} w_i \mathbb{I} \mathbf{T}_{k(i)} \mathbf{x}  \\
+&=  \sum_{i=1}^{n_w} w_i \overrightarrow{\operatorname{diag}}(\mathbf{T}_{k(i)} \mathbf{x}) \mathbbm{1} \\
+&=  \sum_{i=1}^{n_w} w_i \overrightarrow{\operatorname{diag}}(\mathbf{x}, k(i)) \mathbbm{1}.
 ```
 
-where ``D_{i}`` is the diagonal operator, ie. ``D_{i} x`` is the matrix with ``x`` on its ``i^{th}`` diagonal. A convolution layer, despite its name, is a correlation operation, i.e, the adjoint of a convolution. Therefore, we can write:
-
-```math {#LAconvX}
-y = \text{conv}(w, x) = W^\top x = w^\top \mathcal{D}^\top x
-```
-
-which as expected from a convolution is linear with respect to ``x`` on the right and ``w`` on the left. With this linear definition of the convolution, the derivative of a given loss function ``L`` on the convolution is straightforward. The gradient with respect to ``w`` is
-
-```math {#dwla}
-
- \delta w = \frac{d \ \text{L(y)}}{d w} &= \frac{d L}{dy} \frac{d y}{d w} \\
-  &= dy \frac{d \ w^\top \mathcal{D}^\top x}{d w} \\
-  &= dy \ x^\top \mathcal{D}
-
-```
-
-which does correspond to the conventional machine learning definition ``δ w = \text{conv_transpose}(x, dy)`` which in this case is a convolution since ``\text{conv}`` is a correlation. We can easily rewrite this derivative as the transpose of its transpose since ``X^{\top^\top} = X``: 
-
-```math {#dwT}
-\delta w = ( \mathcal{D}^\top \ x \ dy^\top)^\top \\
-\mathcal{D}^\top = \begin{bmatrix} D_{-k}^\top \\ D_{-k+1}^\top \\ ... \\ D_{0}^\top \\ ... \\ D_{k-1}^\top \\ D_{k}^\top\end{bmatrix}.
-```
-
-and because each ``D_{i}`` is the diagonal operator their adjoint is the trace operator shifted by ``i`` i.e summing the values of the ``i^{th}`` diagonal, we have the gradient of a convolution as the traces of a huge matrix that is the outer product of the input and backpropagated residual:
+In this formulation,  ``\mathbf{T}_{k(i)}`` is the circular shift operator that shifts a vector by ``k(i)``, ``k(i)`` is the shift corresponding to the ``i^{th}`` weight in ``\mathbf{w}`` and ``\overrightarrow{\operatorname{diag}}`` is the operator that puts a vector onto the diagonal (no seond argument) or onto the ``k(i)^{th}`` off-digonal (with second argument). While this formulation doesn't represent the computational aspect of the convolution, we can easily derive the gradient with respect to the weight for the convolution in a linear algebra framework. Apllying the chain rule to Equation #LAconv we can write:
 
 ```math {#dwtr}
-  \delta w = \text{tr}(x \ dy^\top, -k:k)^\top.
+\frac{\partial y}{\partial {w}_i} & = \frac{\partial f(\mathbf{U})}{\partial \mathbf{U}}\frac{\partial \mathbf{u}}{\partial \mathbf{w}}\frac{\partial \mathbf{w}}{\partial w_i} \\
+& = \delta \mathbf{Y}^\top \overrightarrow{\operatorname{diag}}(\mathbf{T}_{k(i)}\mathbf{X})\mathbbm{1} \\
+& = \overleftarrow{\operatorname{diag}}( (\mathbf{T}_{k(i)}\mathbf{X})\delta \mathbf{Y}^\top)\mathbbm{1} \\
+& = \overleftarrow{\operatorname{diag}}(\mathbf{X})\delta \mathbf{Y}^\top, k(i))\mathbbm{1} \\
+& = \operatorname{tr}(\mathbf{X}\delta \mathbf{Y}^\top, k(i))
 ```
 
-where ``\text{tr}(X, \text{inds})`` takes each trace at the diagonal indexed by ``\text{inds}``.  While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise we can obtain an unbiased estimate of the trace via matrix probing techniques [refs]. These methods are designed to estimate the diagonals and traces of matrixes that are either too big to be explicitly formed, or in general for linear operator that are only accessible via their acation. THese linear operator are usually implemented in a mtrix-free framework (sPOT, pyops, ...) only allowing their action instead of their value. This unbiased estimate of the traces is then obtain via repeated left and right matrix-vector products on carefully chosen random vectors. This unbiased estimator is defined as:
+where ``\mathbf{X}, \delta \mathbf{Y}`` are ``\mathbf{x}, \delta \mathbf{y}`` vectorized along the image and channel dimensions. Similarly to the forward convolution ``overleftarrow{\operatorname{diag}}`` this time extracts the diagonal or offdiagonal of a matrix and ``\operatorname{tr}`` is the trace operator that sums the values of the ``k(i)^{th}`` diagonal. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise we can obtain an unbiased estimate of the trace via matrix probing techniques [refs]. These methods are designed to estimate the diagonals and traces of matrixes that are either too big to be explicitly formed, or in general for linear operator that are only accessible via their acation. THese linear operator are usually implemented in a mtrix-free framework (sPOT, pyops, ...) only allowing their action instead of their value. This unbiased estimate of the traces is then obtain via repeated left and right matrix-vector products on carefully chosen random vectors. This unbiased estimator is defined as:
 
-```math {#grad_ev}
-    \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z_{i,j}^* \tilde{X} \tilde{\Delta}^* z \\
+```math {#grad_pr}
+    \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z_{i,j}^* \mathbf{X} \delta \mathbf{Y}^\top z \\
     \mathbb{E}(\widetilde{\delta W[i,j]}) &= \delta W[i,j],
 ```
 
-where ``\tilde{X}, \tilde{\Delta}`` are ``X, \Delta`` vectorized along the image and channel dimensions and ``z`` are ``M`` random probing vectors drawn from ``\mathcal{U}(-.5, .5)``. The sum is normalized by ``c_0`` to compensate for the variance of the shifted uniform distribution. In theory, Radamaecher or ``\mathcal{N}(0, 1)`` distibutions for ``z`` would provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance. Our choice of distribution is still acceptable since the probing vector ``z`` satisfies:
+and ``z`` are ``M`` random probing vectors drawn from ``\mathcal{U}(-.5, .5)``. The sum is normalized by ``c_0`` to compensate for the variance of the shifted uniform distribution. In theory, Radamaecher or ``\mathcal{N}(0, 1)`` distibutions for ``z`` would provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance. Our choice of distribution is still acceptable since the probing vector ``z`` satisfies:
 
 ```math {#reqs}
-  \mathbb{E}(z) = 0, \ \ \mathbb{E}(z^*z) = c_0
+  \mathbb{E}(z) = 0, \ \ \mathbb{E}(z^\top z) = c_0
 ```
 
 and guaranties the unbiasing of our estimate.
 
 ## Compact memory forward-backward implementation
 
-In order to reduce the memory imprint of a convolutional layer, we implemented the proposed method with a compact in memory forward-backward design. This implementation is based on the symmetry of the probing in Equation #grad_ev that is equivalent to
+In order to reduce the memory imprint of a convolutional layer, we implemented the proposed method with a compact in memory forward-backward design. This implementation is based on the symmetry of the probing and the trace. We can reformulate the trace formualtion in Equation #dwtr and its unbiased estimate in Equation #grad_pr as:
 
-```math {#grad_ev_x}
-    \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z^* \tilde{X} \tilde{\Delta}^* z_{-i,-j} \\
-    \mathbb{E}(\widetilde{\delta W[i,j]}) &= \delta W[i,j].
+```math {#dwsplit}
+\delta w_i &= \operatorname{tr}(\mathbf{X}\delta \mathbf{Y}^\top, k(i)), \quad\mathbf{X}\in\mathbb{R}^{N\times b}\\
+                &\approx \frac{1}{r} \sum_{j=1}^r \left(\mathbf{z}_j^\top\mathbf{T}_{k(i)}\mathbf{X}\right)\left(\delta \mathbf{Y}^\top\mathbf{z}_j\right)\\
+                & = \frac{1}{r} \sum_{j=1}^r \left(\mathbf{z}_j^\top\mathbf{X}\right)\left(\delta \mathbf{Y}^\top\mathbf{T}_{-k(i)}\mathbf{z}_j\right)\\
+                & = \frac{1}{r} \operatorname{tr}(\underbrace{(\mathbf{Z}^\top\mathbf{X})}_{\mathbf{\overline{X}}\in \mathbb{R}^{r\times b}}\underbrace{(\delta \mathbf{Y}^\top\mathbf{T}_{-k(i)}\mathbf{Z})}_{\delta\mathbf{\overline{Y}}^\top\in \mathbb{R}^{b\times r}}),\, i=1\cdots n_w.
 ```
 
-In this symmetrized expression, the shift are applied to the backpropagated residual that allows us to compute ``X_e =z^* \tilde{X}`` during the forward propagation through the layer. This precomputation then only requires to store the matrix ``X_e`` of size ``B x p_s`` that leads to a memory reduction by a factor of ``\frac{N_x N_y C_i}{ps}``. For example, for a small image of size ``32x32`` and ``16`` input channels, this implementation leads to a mempry reduction by a factor of ``2^{14-p}`` for ``ps=2^p``. We then only need to allocate temporary memory for each layer for the probing vector that can be redrwan from a saved random generator seed. The forward-backward algorithm is summarized in Algorithm #ev_fwd_bck\.
+In this symmetrized expression, the shift are applied to the backpropagated residual that allows us to compute ``overline{\mathbf{X}} =z^\top \mathbf{X}`` during the forward propagation through the layer. This precomputation then only requires to store the matrix ``X_e`` of size ``B x r`` that leads to a memory reduction by a factor of ``\frac{N_x N_y C_i}{r}``. For example, for a small image of size ``32x32`` and ``16`` input channels, this implementation leads to a memory reduction by a factor of ``2^{14-p}`` for ``r=2^p``. We then only need to allocate temporary memory for each layer for the probing vector that can be redrwan from a saved random generator seed. The forward-backward algorithm is summarized in Algorithm #ev_fwd_bck\.
 
 ### Algorithm: {#ev_fwd_bck}
 | Forward pass:
-| 1. Convolution ``Y = C(X)``
-| 2. Draw a random seed ``s`` and probing vectors ``z``
-| 3. Compute and save ``X_e = z^* \tilde{X}``, save the seed ``s``
+| 1. Convolution ``\mathbf{y} = C(\mathbf{x}, \mathbf{w})``
+| 2. Draw a random seed ``s`` and probing vectors ``\mathbf{Z}(s)``
+| 3. Compute and save ``\mathbf{\overline{X}} = \mathbf{Z}(s)^\top\mathbf{X}$``
+| 4. Store ``\overline{\mathbf{X}}, s``
 | Backward pass:
-| 1. Redraw ``z`` from ``s``
-| 2. Compute ``\widetilde{\delta W[i,j]}`` according to Equation #grad_ev_x
+| 1. Load random seed ``s`` and probed forward ``\overline{\mathbf{X}}``
+| 2. Redraw probinf vectors ``\mathbf{Z}(s)`` from ``s``
+| 3. Compute backward probe ``\overline{\mathbf{Y}}^\top = \delta \mathbf{Y}^\top\mathbf{T}_{-k(i)}\mathbf{Z}(s)``
+| 4. Compute gradient ``\delta \mathbf{w} = \operatorname{tr}(\overline{\mathbf{X}}\, \overline{\mathbf{Y}}^\top)``
 : Forward-backward unbiased estimator via trace estimation.
 
 While a full network contains a variety of layer, the overall memory gains will not be as massive over the network. The overall saving will depend on the ratio of convolution to the other type of layers.
