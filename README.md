@@ -1,4 +1,4 @@
-# Memroy efficient convolution layer via matrix sketching
+# Memory efficient convolution layer via matrix sketching
 
 This software provides the implementation of convolution layers where the gradient with respect to the weights
 is approximated by an unbiased estimate. This estimate is obtained via matrix probing. This package contains two implementation:
