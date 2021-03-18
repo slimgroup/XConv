@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/346371507.svg)](https://zenodo.org/badge/latestdoi/346371507)
+
 # Memory efficient convolution layer via matrix sketching
 
 This software provides the implementation of convolution layers where the gradient with respect to the weights
