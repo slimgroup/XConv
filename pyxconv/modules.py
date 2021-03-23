@@ -2,7 +2,7 @@ import torch
 
 import pyxconv
 
-__all__ = ['Xconv2D', 'Xconv3D']
+__all__ = ['Xconv2D', 'Xconv3D', 'BReLU', 'RBatchNorm2d']
 
 
 _pair = torch.nn.modules.utils._pair
@@ -11,6 +11,7 @@ _triple = torch.nn.modules.utils._triple
 conv2d = pyxconv.funcs.Xconv2D.apply
 conv3d = pyxconv.funcs.Xconv3D.apply
 brelu = pyxconv.funcs.Brelu.apply
+rbatchnorm2d = pyxconv.funcs.RBatchNorm2d.apply
 
 
 class Xconv2D(torch.nn.modules.conv._ConvNd):
@@ -50,3 +51,13 @@ class BReLU(torch.nn.ReLU):
 
     def forward(self, input):
         return brelu(input, self.inplace)
+
+class RBatchNorm2d(torch.nn.BatchNorm2d):
+    def __init__(self, num_features, eps=1e-5, momentum=0.1,
+                 affine=True, track_running_stats=True, avg=2):
+        self.avg = avg
+        super(RBatchNorm2d, self).__init__(num_features, eps, momentum,
+                                           affine, track_running_stats)
+
+    def forward(self, input):
+        return rbatchnorm2d(input, self.weight, self.bias, self)

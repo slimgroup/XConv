@@ -198,3 +198,46 @@ class Brelu(torch.autograd.Function):
         if ctx.needs_input_grad[0]:
             return grad_output*binp, None
         return None, None
+
+
+class RBatchNorm2d(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, input, weight, bias, bnnn):
+        sigma = 1/input.var(dim=[0, 2, 3], unbiased=False).sqrt()
+        ctx.save_for_backward(sigma, weight, bias)
+        ctx.avg = bnnn.avg
+        ctx.xshape = input.shape
+
+        with torch.autograd.grad_mode.no_grad():
+            Y = torch.nn.BatchNorm2d.forward(bnnn, input)
+        return Y
+    
+    @staticmethod
+    def backward(ctx, grad_output):
+        sigma, gamma, beta = ctx.saved_tensors
+        gamma = gamma.view(1, -1, 1, 1)
+        sigma = sigma.view(1, -1, 1, 1)
+        #gradient of beta
+        grad_beta = None
+        if ctx.needs_input_grad[2]:
+            grad_beta = grad_output.sum(dim=[0, 2, 3])
+
+        for i in range(ctx.avg):
+            xhat = torch.randn(ctx.xshape, device=grad_output.device)
+            #gradient of the input
+            grad_input = torch.zeros(ctx.xshape) if ctx.needs_input_grad[0] else None
+            if ctx.needs_input_grad[0]:
+
+                term_1 = ctx.xshape[0] * grad_output
+                term_2 = torch.sum(grad_output, dim=0, keepdim=True)
+                term_3 = xhat * torch.sum(grad_output * xhat, dim=0, keepdim=True)
+                
+                grad_input += (gamma*sigma/ctx.xshape[0]) * (term_1 - term_2 - term_3)
+
+            #gradient of gamma
+            grad_gamma = torch.zeros(gamma.shape[1]) if ctx.needs_input_grad[1] else None
+            if ctx.needs_input_grad[1]:
+                grad_gamma += torch.sum(torch.mul(grad_output, xhat), dim=[0, 2, 3])
+    
+        return grad_input/ctx.avg, grad_gamma/ctx.avg, grad_beta, None
