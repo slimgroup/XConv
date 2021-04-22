@@ -65,7 +65,8 @@ def log_mem(model, inp, mem_log=None, exp=None):
         print(f"Errored with error {e}")
     finally:
         [h.remove() for h in hr]
-        return mem_log
+    
+    return mem_log
 
 def plot_mem(
         df,
@@ -94,13 +95,17 @@ def plot_mem(
             mem_all = df_.mem_all - df_[df_.call_idx == df_.call_idx.min()].mem_all.iloc[0]
             df_.mem_all = mem_all / 2 ** 30
 
-        layer_idx = 0
-        callidx_fwd = df_[(df_["layer_idx"] == layer_idx) & (df_["hook_type"] == "fwd")]["call_idx"].iloc[0]
-        if filter_fwd:    
-            df_ = df_[df_["call_idx"] <= callidx_fwd]
-
         plot = df_.plot(ax=ax, y='call_idx', x='mem_all', ylabel='Layer', xlabel='Memory (Gb)', label=labels[exp], fontsize=20, linewidth=4)
-        plot.axhline(y=callidx_fwd)
+        
+        try:
+            layer_idx = 0
+            callidx_fwd = df_[(df_["layer_idx"] == layer_idx) & (df_["hook_type"] == "fwd")]["call_idx"].iloc[0]
+            if filter_fwd:
+                df_ = df_[df_["call_idx"] <= callidx_fwd]
+            plot.axhline(y=callidx_fwd)
+        except:
+            pass
+
         layer_list = list(df_.layer_type) if len(df_.layer_type) > len(layer_list) else layer_list
     
     ax.set_yticks(range(0, len(layer_list)))

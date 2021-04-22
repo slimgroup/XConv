@@ -68,7 +68,6 @@ def fwd_probe(ps: int, ci: int, N: int, X):
     e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
     eX = torch.empty(X.shape[0], ps, device=X.device)
     torch.mm(Xv, e, out=eX)
-    
     return eX
 
 
@@ -82,7 +81,6 @@ class Xconv2D(torch.autograd.Function):
         b, ci, nx, ny = input.shape
         with torch.autograd.grad_mode.no_grad():
             eX = fwd_probe(ps, ci, nx*ny, input)
-
         ctx.xshape = input.shape
         ctx.stride = stride
         ctx.dilation = dilation

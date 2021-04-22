@@ -44,7 +44,7 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.02, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -142,9 +142,9 @@ def main_worker(gpu, ngpus_per_node, args):
         model = models.__dict__[args.arch]()
 
     if args.ps > 0:
-        conv1 = model.features[0]
+        conv1 = model.conv1
         convert_net(model, 'net', mode='all', ps=args.ps)
-        model.features[0] = conv1
+        model.conv1 = conv1
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
