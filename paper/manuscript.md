@@ -54,7 +54,21 @@ bonjour
 - Unbiased approximation shown to be good (put refs)
 - Lessons learned from PDE adjoint state
 
+## Related work
+
+RAD
+Compress sensing
+Randomized SVD
+Gaussian inference
+
 ## Theory
+
+{>> REDo math<<}
+
+TODO:
+- Make math from sildes 
+- Add error bounds table
+- Add variance expressions
 
 Consider the standard convolution on an input ``\mathbf{x}`` with weights ``\mathbf{w}``. We can write the convolution in a linear algebra formulation as follows:
 
@@ -166,6 +180,9 @@ We show on Figure #cpu-bench and #gpu-bench the benchmarked runtime to compute a
 
 These benchmarking results show that the proposed method leads to significant speedup (up to X10) in the computation of the gradient which would lead to drastic cost reduction for training a network. We did not optimizae the GPU implementation yet and will consider it in the future. However, due to the capabilities of converntional GPU kernels, we do not expect such speedup but we are confident that an optimal implementation of our probed algorithm would be competitive with sate-of-the-art accelerators kernels.
 
+#### Figure: {#gpu-bench}
+![B=4](figures/runtimes/bench_cpu_4_4.png){width=40%}
+
 ## Training
 
 ### MNIST
@@ -176,6 +193,7 @@ These benchmarking results show that the proposed method leads to significant sp
 - 20 epochs`
 - ADAM with initial learning rate of ``.003``
 - MNSIST dataset for varying batch size and probing size
+- Always keep first layer intact since the input is already in memory for free.
 
 ### Table: {#MNIST-batch}
 |           | ``B=32``   | ``B=64``   | ``B=128``  | ``B=256``  | ``B=512``  | ``B=1024`` |
@@ -189,6 +207,25 @@ These benchmarking results show that the proposed method leads to significant sp
 | ``ps=64`` | ``0.9874`` | ``0.9829`` | ``0.9877`` | ``0.9848`` | ``0.9819`` | ``0.9803`` |
 
 : Training accuracy for varying batch sizes ``B`` and number of probing vectors ``ps`` on the MNIST dataset.
+
+
+### CIFAR10
+
+- resnet44
+- Quadro P1000 
+- 200 epochs
+- ps=64
+- SGD
+
+
+### Imagenet
+
+- resnet18
+- NC24 (4X K80), 12Gb memory per K80
+- batchsize 2048 with probing (64), 1024 without probing (can maybe fit ~1200)
+- 90 epochs
+- SGD, inital LR=.04
+
 
 # Implementation and code availability
 
