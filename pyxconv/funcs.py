@@ -2,7 +2,6 @@ import torch
 import torch.nn.functional as F
 
 from typing import List, Tuple
-import opt_einsum as oe
 
 from pyxconv.utils import *
 
@@ -30,7 +29,7 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     """
     # Redraw e
     torch.random.manual_seed(seed)
-    e = torch.randn(ci, N, ps, device=eX.device, dtype=eX.dtype)
+    e = torch.sign(torch.randn(ci, N, ps, device=eX.device, dtype=eX.dtype))
 
     # Y' X e
     Ye = grad_output.view(b, -1)
@@ -46,8 +45,7 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     LRe = LRe.view(ps, co, N) if N==1 else LRe.view(ps, co, N).narrow(2, se, eend)
     for i, o in enumerate(offs):
         ev = e if N==1 else e.narrow(1, se+o, eend)
-        expr = oe.contract_expression("bjk,lkb", LRe.shape, ev.shape)
-        grad_weight[:, :, i] = expr(LRe, ev, backend='torch')
+        grad_weight[:, :, i] = torch.einsum('pon,inp -> oi', LRe, ev)
     return grad_weight/(ps)
 
 
@@ -64,13 +62,13 @@ def fwd_probe(ps: int, ci: int, N: int, X):
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
     Xv = X.reshape(X.shape[0], -1)
-    e = torch.randn(ci, N, ps, device=X.device, dtype=X.dtype).view(ci*N, ps)
+    e = torch.sign(torch.randn(ci, N, ps, device=X.device, dtype=X.dtype).view(ci*N, ps))
     eX = torch.mm(Xv, e)
     
     return eX
 
 
-# @torch.jit.script
+@torch.jit.script
 def fwd_probe_x(ps: int, ci: int, N: int, X):
     """
     Forward pass of probing-based convolution filter gradient.
@@ -82,12 +80,13 @@ def fwd_probe_x(ps: int, ci: int, N: int, X):
     Returns:
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
-    Xv = X.reshape(X.shape[0], -1)
-    e = torch.randn(ci, N, ps, device=X.device, dtype=X.dtype).view(ci*N, ps)
-    eX = torch.mm(Xv, e)
-    rX = torch.mm(eX, e.t())/ps
+    Xv = X.reshape(X.shape[0], X.shape[1], -1)
+    e = torch.sign(torch.randn(ci, N, ps, device=X.device, dtype=X.dtype))
 
-    return eX, rX.reshape(X.shape)
+    eX = torch.einsum('bcn,cnp -> bcp', Xv, e)
+    rX = torch.einsum('bcp,cnp -> bcn', eX, e)
+
+    return eX.sum(dim=1)/ci, rX.reshape(X.shape)/ps
 
 
 class Xconv2d(torch.autograd.Function):

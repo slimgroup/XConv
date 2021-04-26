@@ -1,6 +1,6 @@
 from torch.utils.checkpoint import checkpoint_sequential
 import torch
-import nvidia_smi
+# import nvidia_smi
 from matplotlib import pyplot as plt
 plt.rcParams.update({'font.size': 20})
 

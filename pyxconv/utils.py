@@ -4,14 +4,14 @@ from typing import Tuple
 __all__ = ['convert_net', 'dilate2d', 'dilate3d', 'offsets2d', 'offsets3d']
 
 
-modes = {'conv': Xconv2D, 'xconv': Xconv2D, 'zconv': Zconv2D, 'all': Xconv2D}
 
 def convert_net(module, name='net', ps=16, mode='all'):
     """
     Recursively replaces all nn.Conv2d by XConv2D
 
     """
-    from .modules import Xconv2D, BReLU
+    from .modules import Xconv2D, Zconv2D, BReLU
+    modes = {'conv': Xconv2D, 'xconv': Xconv2D, 'zconv': Zconv2D, 'all': Xconv2D}
     # iterate through immediate child modules. Note, the recursion is done by our code no need to use named_modules()
     for child_name, child in module.named_children():
         if isinstance(child, torch.nn.Conv2d) and mode in modes:
