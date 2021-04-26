@@ -4,6 +4,8 @@ from typing import Tuple
 __all__ = ['convert_net', 'dilate2d', 'dilate3d', 'offsets2d', 'offsets3d']
 
 
+modes = {'conv': Xconv2D, 'xconv': Xconv2D, 'zconv': Zconv2D, 'all': Xconv2D}
+
 def convert_net(module, name='net', ps=16, mode='all'):
     """
     Recursively replaces all nn.Conv2d by XConv2D
@@ -12,11 +14,13 @@ def convert_net(module, name='net', ps=16, mode='all'):
     from .modules import Xconv2D, BReLU
     # iterate through immediate child modules. Note, the recursion is done by our code no need to use named_modules()
     for child_name, child in module.named_children():
-        if isinstance(child, torch.nn.Conv2d) and mode in ['all', 'conv']:
-            newconv = Xconv2D(child.in_channels, child.out_channels,
-                              child.kernel_size, ps=ps, stride=child.stride,
-                              padding=child.padding)
+        if isinstance(child, torch.nn.Conv2d) and mode in modes:
+            b = child.bias is not None
+            newconv = modes[mode](child.in_channels, child.out_channels,
+                                  child.kernel_size, ps=ps, stride=child.stride,
+                                  padding=child.padding, bias=b)
             newconv.weight = child.weight
+            newconv.bias = child.bias
             setattr(module, child_name, newconv)
         elif isinstance(child, torch.nn.ReLU) and mode in ['all', 'relu']:
             setattr(module, child_name, BReLU(inplace=child.inplace))

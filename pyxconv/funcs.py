@@ -30,14 +30,14 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     """
     # Redraw e
     torch.random.manual_seed(seed)
-    e = torch.randn(ci, N, ps, device=eX.device)
+    e = torch.randn(ci, N, ps, device=eX.device, dtype=eX.dtype)
 
     # Y' X e
     Ye = grad_output.view(b, -1)
     LRe = torch.mm(eX.t(), Ye)
 
     # Init gradien
-    grad_weight = torch.zeros(co, ci, nw, device=eX.device)
+    grad_weight = torch.zeros(co, ci, nw, device=eX.device, dtype=eX.dtype)
 
     # Loop over offsets (can be improved later on)
     se = offs[-1]
@@ -48,8 +48,7 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
         ev = e if N==1 else e.narrow(1, se+o, eend)
         expr = oe.contract_expression("bjk,lkb", LRe.shape, ev.shape)
         grad_weight[:, :, i] = expr(LRe, ev, backend='torch')
-        #grad_weight[:, :, i] = torch.einsum('bjk, lkb -> jl', LRe, ev)
-    return grad_weight/ps
+    return grad_weight/(ps)
 
 
 @torch.jit.script
@@ -65,14 +64,33 @@ def fwd_probe(ps: int, ci: int, N: int, X):
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
     Xv = X.reshape(X.shape[0], -1)
-    e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
-    eX = torch.empty(X.shape[0], ps, device=X.device)
-    torch.mm(Xv, e, out=eX)
+    e = torch.randn(ci, N, ps, device=X.device, dtype=X.dtype).view(ci*N, ps)
+    eX = torch.mm(Xv, e)
     
     return eX
 
 
-class Xconv2D(torch.autograd.Function):
+# @torch.jit.script
+def fwd_probe_x(ps: int, ci: int, N: int, X):
+    """
+    Forward pass of probing-based convolution filter gradient.
+
+    Arguments:
+        ps (int): Number of probing vectors
+        X (Tensor): Layer's input Tensor
+
+    Returns:
+        eX (Tensor): Probed input tensor to be saved for backward pass
+    """
+    Xv = X.reshape(X.shape[0], -1)
+    e = torch.randn(ci, N, ps, device=X.device, dtype=X.dtype).view(ci*N, ps)
+    eX = torch.mm(Xv, e)
+    rX = torch.mm(eX, e.t())/ps
+
+    return eX, rX.reshape(X.shape)
+
+
+class Xconv2d(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0,
@@ -127,7 +145,31 @@ class Xconv2D(torch.autograd.Function):
         return dx, dw, None, db, None, None, None, None
 
 
-class Xconv3D(torch.autograd.Function):
+class Zconv2d(Xconv2d):
+
+    @staticmethod
+    def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0,
+                dilation=1, groups=1):
+
+        seed = torch.tensor([12345]) #torch.randint(100000, (1,))
+        torch.random.manual_seed(seed)
+        b, ci, nx, ny = input.shape
+        with torch.autograd.grad_mode.no_grad():
+            eX, rX = fwd_probe_x(ps, ci, nx*ny, input)
+            Y = F.conv2d(rX, weight, bias=bias, stride=stride,
+                         padding=padding, groups=groups)
+
+            ctx.xshape = input.shape
+            ctx.stride = stride
+            ctx.dilation = dilation
+            ctx.groups = groups
+            ctx.padding = padding
+
+            ctx.save_for_backward(eX, seed, weight, bias)
+            return Y
+
+    
+class Xconv3d(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input, weight, ps=8, bias=None, stride=1,
@@ -180,6 +222,32 @@ class Xconv3D(torch.autograd.Function):
             db = grad_output.sum((0, 2, 3, 4)).squeeze(0)
 
         return dx, dw, None, db, None, None, None, None
+
+
+class Zconv3d(Xconv3d):
+
+    @staticmethod
+    def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0,
+                dilation=1, groups=1):
+
+        with torch.autograd.grad_mode.no_grad():
+            seed = torch.randint(100000, (1,))
+            torch.random.manual_seed(seed)
+            b, ci, nx, ny, nz = input.shape
+
+            eX, rX = fwd_probe_x(ps, ci, nx*ny*nz, input)
+            Y = F.conv3d(rX, weight, bias=bias, stride=stride,
+                         padding=padding, groups=groups)
+
+            ctx.xshape = input.shape
+            ctx.stride = stride
+            ctx.dilation = dilation
+            ctx.groups = groups
+            ctx.padding = padding
+
+            ctx.save_for_backward(eX, seed, weight, bias)
+            return Y
+
 
 class Brelu(torch.autograd.Function):
     
