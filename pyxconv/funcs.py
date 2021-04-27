@@ -68,7 +68,7 @@ def fwd_probe(ps: int, ci: int, N: int, X):
     return eX
 
 
-@torch.jit.script
+# @torch.jit.script
 def fwd_probe_x(ps: int, ci: int, N: int, X):
     """
     Forward pass of probing-based convolution filter gradient.
