@@ -40,6 +40,7 @@ roofline:
 # TODO
 
 - [] Add refs
+- [] redo math
 - [] Run gpu benchmark (maybe)
 - [] Cleanup theory
 - [] Redo some plots
@@ -51,13 +52,16 @@ bonjour
 ## Introduction
 
 - Convolution layer gradients are expensive and main cost of CNNs.
-- Unbiased approximation shown to be good (put refs)
-- Lessons learned from PDE adjoint state
+- Unbiased approximation shown to be good (RAD) and randomness as well (DFA)
+- Low memory = larger batch size. Large batch size trending (LARS, facebook large minibatch)
+(- Lessons learned from PDE adjoint state)
+
 
 ## Related work
 
 RAD
 Compress sensing
+DFA
 Randomized SVD
 Gaussian inference
 
@@ -70,26 +74,34 @@ TODO:
 - Add error bounds table
 - Add variance expressions
 
-Consider the standard convolution on an input ``\mathbf{x}`` with weights ``\mathbf{w}``. We can write the convolution in a linear algebra formulation as follows:
+Consider the standard convolution on an input ``\mathbf{X}`` with weights ``w_i``. We can write the convolution in a linear algebra form as follows:
 
 ```math {#LAconv}
-\mathbf{u} = \operatorname{conv}(\mathbf{x};\mathbf{w}) &= \left(\sum_{i=1}^{n_w}\operatorname{diag}(\mathbf{w}_i)\mathbf{T}_{k(i)}\right) \mathbf{x} \\
-& = \sum_{i=1}^{n_w} w_i \mathbb{I} \mathbf{T}_{k(i)} \mathbf{x}  \\
-&=  \sum_{i=1}^{n_w} w_i \overrightarrow{\operatorname{diag}}(\mathbf{T}_{k(i)} \mathbf{x}) \mathbbm{1} \\
-&=  \sum_{i=1}^{n_w} w_i \overrightarrow{\operatorname{diag}}(\mathbf{x}, k(i)) \mathbbm{1}.
+\mathbf{W} = \sum_{i=1}^{n_w} \overrightarrow{\operatorname{diag}}(\mathbf{w}_i) T_{k(i)}
+ = \sum_{i=1}^{n_w} \overrightarrow{\operatorname{diag}}(w_i \mathbf{1}) T_{k(i)} \\
+\mathbf{Y} = \mathbf{W}\mathbf{X}
 ```
 
 In this formulation,  ``\mathbf{T}_{k(i)}`` is the circular shift operator that shifts a vector by ``k(i)``, ``k(i)`` is the shift corresponding to the ``i^{th}`` weight in ``\mathbf{w}`` and ``\overrightarrow{\operatorname{diag}}`` is the operator that puts a vector onto the diagonal (no seond argument) or onto the ``k(i)^{th}`` off-digonal (with second argument). While this formulation doesn't represent the computational aspect of the convolution, we can easily derive the gradient with respect to the weight for the convolution in a linear algebra framework. Apllying the chain rule to Equation #LAconv we can write:
 
 ```math {#dwtr}
-\frac{\partial y}{\partial {w}_i} & = \frac{\partial f(\mathbf{U})}{\partial \mathbf{U}}\frac{\partial \mathbf{u}}{\partial \mathbf{w}}\frac{\partial \mathbf{w}}{\partial w_i} \\
-& = \delta \mathbf{Y}^\top \overrightarrow{\operatorname{diag}}(\mathbf{T}_{k(i)}\mathbf{X})\mathbbm{1} \\
-& = \overleftarrow{\operatorname{diag}}( (\mathbf{T}_{k(i)}\mathbf{X})\delta \mathbf{Y}^\top)\mathbbm{1} \\
-& = \overleftarrow{\operatorname{diag}}(\mathbf{X})\delta \mathbf{Y}^\top, k(i))\mathbbm{1} \\
-& = \operatorname{tr}(\mathbf{X}\delta \mathbf{Y}^\top, k(i))
+\frac{\partial }{\partial w_i} f(\mathbf{W}\mathbf{X}) &= \operatorname{tr}\left(\left(\frac{\partial f(\mathbf{W}\mathbf{X})}{\partial \mathbf{W}}\right)^\top \frac{\partial \mathbf{W}}{\partial w_i}\right) \\
+                                                       &= \operatorname{tr}\left(\left(\delta \mathbf{Y} \mathbf{X}^\top\right)^\top \mathbf{T}_{k(i)}^\top\right) \\
+                                                       &= \operatorname{tr}\left(\mathbf{X} \delta \mathbf{Y}^\top \mathbf{T}_{-k(i)}\right), i=1\cdots n_w.
 ```
 
-where ``\mathbf{X}, \delta \mathbf{Y}`` are ``\mathbf{x}, \delta \mathbf{y}`` vectorized along the image and channel dimensions. Similarly to the forward convolution ``overleftarrow{\operatorname{diag}}`` this time extracts the diagonal or offdiagonal of a matrix and ``\operatorname{tr}`` is the trace operator that sums the values of the ``k(i)^{th}`` diagonal. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise we can obtain an unbiased estimate of the trace via matrix probing techniques [refs]. These methods are designed to estimate the diagonals and traces of matrixes that are either too big to be explicitly formed, or in general for linear operator that are only accessible via their acation. THese linear operator are usually implemented in a mtrix-free framework (sPOT, pyops, ...) only allowing their action instead of their value. This unbiased estimate of the traces is then obtain via repeated left and right matrix-vector products on carefully chosen random vectors. This unbiased estimator is defined as:
+where ``\mathbf{X}, \delta \mathbf{Y}`` are ``\mathbf{x}, \delta \mathbf{y}`` vectorized along the image and channel dimensions. Similarly to the forward convolution ``overleftarrow{\operatorname{diag}}`` this time extracts the diagonal or offdiagonal of a matrix and ``\operatorname{tr}`` is the trace operator that sums the values of the ``k(i)^{th}`` diagonal. While explicitly computing this outer-product would be unefficient both computationnaly and memory-wise we can obtain an unbiased estimate of the trace via matrix probing techniques [refs]. These methods are designed to estimate the diagonals and traces of matrixes that are either too big to be explicitly formed, or in general for linear operator that are only accessible via their acation. These linear operator are usually implemented in a matrix-free framework (sPOT, pyops, ...) only allowing their action instead of their value. This unbiased estimate of the traces is then obtain via repeated left and right matrix-vector products on carefully chosen random vectors. The trace estimators derives from the following unbiased estimate of the identity matrix
+
+```math {#trdef}
+\operatorname{tr}(\mathbf{A})& =\operatorname{tr}\left(\mathbf{A} \mathbf{I}\right)=\operatorname{tr}\left(\mathbf{A} \mathbb{E}\left[\mathbf{z} \mathbf{z}^{\top}\right]\right) \\
+                             & =\mathbb{E}\left[\operatorname{tr}\left(\mathbf{A} \mathbf{z} \mathbf{z}^{\top}\right)\right]\\
+                             & =\mathbb{E}\left[\mathbf{z}^{\top} \mathbf{A} \mathbf{z}\right]\\
+                             & \approx \frac{1}{r}\sum_{i=1}^r\left[\mathbf{z}^{\top}_i \mathbf{A} \mathbf{z}_i\right]\\
+                             & = \frac{1}{r}\operatorname{tr}\left(\mathbf{Z}^\top \mathbf{A}\mathbf{Z}\right).
+
+```
+
+We can use this derivation, replacing ``\mathbf{A}`` by the outer product of the input and backpropagated reisdual to obtain the unbiased estimator of the gradient with respect to the weights:
 
 ```math {#grad_pr}
     \widetilde{\delta W[i,j]} &= \frac{1}{c_0 M} \sum_{z \in \mathcal{U}(-.5, .5)} z_{i,j}^* \mathbf{X} \delta \mathbf{Y}^\top z \\
@@ -109,13 +121,19 @@ and guaranties the unbiasing of our estimate.
 In order to reduce the memory imprint of a convolutional layer, we implemented the proposed method with a compact in memory forward-backward design. This implementation is based on the symmetry of the probing and the trace. We can reformulate the trace formualtion in Equation #dwtr and its unbiased estimate in Equation #grad_pr as:
 
 ```math {#dwsplit}
-\delta w_i &= \operatorname{tr}(\mathbf{X}\delta \mathbf{Y}^\top, k(i)), \quad\mathbf{X}\in\mathbb{R}^{N\times b}\\
-                &\approx \frac{1}{r} \sum_{j=1}^r \left(\mathbf{z}_j^\top\mathbf{T}_{k(i)}\mathbf{X}\right)\left(\delta \mathbf{Y}^\top\mathbf{z}_j\right)\\
-                & = \frac{1}{r} \sum_{j=1}^r \left(\mathbf{z}_j^\top\mathbf{X}\right)\left(\delta \mathbf{Y}^\top\mathbf{T}_{-k(i)}\mathbf{z}_j\right)\\
-                & = \frac{1}{r} \operatorname{tr}(\underbrace{(\mathbf{Z}^\top\mathbf{X})}_{\mathbf{\overline{X}}\in \mathbb{R}^{r\times b}}\underbrace{(\delta \mathbf{Y}^\top\mathbf{T}_{-k(i)}\mathbf{Z})}_{\delta\mathbf{\overline{Y}}^\top\in \mathbb{R}^{b\times r}}),\, i=1\cdots n_w.
+\delta w_i   & = \frac{1}{r} \operatorname{tr}((\mathbf{Z}^\top\mathbf{X})\delta \mathbf{Y}^\top\mathbf{T}_{-k(i)}\mathbf{Z}), i=1\cdots n_w.
 ```
 
-In this symmetrized expression, the shift are applied to the backpropagated residual that allows us to compute ``overline{\mathbf{X}} =z^\top \mathbf{X}`` during the forward propagation through the layer. This precomputation then only requires to store the matrix ``X_e`` of size ``B x r`` that leads to a memory reduction by a factor of ``\frac{N_x N_y C_i}{r}``. For example, for a small image of size ``32x32`` and ``16`` input channels, this implementation leads to a memory reduction by a factor of ``2^{14-p}`` for ``r=2^p``. We then only need to allocate temporary memory for each layer for the probing vector that can be redrwan from a saved random generator seed. The forward-backward algorithm is summarized in Algorithm #ev_fwd_bck\.
+
+In this symmetrized expression, the shift are applied to the backpropagated residual that allows us to compute ``overline{\mathbf{X}} =\mathbf{Z}^ \mathbf{X}`` during the forward propagation through the layer. This precomputation then only requires to store the matrix ``X_e`` of size ``B x r`` that leads to a memory reduction by a factor of ``\frac{N_x N_y C_i}{r}``. 
+The computation of this expression can be summarized in three steps that optimize the recomputation while requiing a single temporary of size at most equivalent to the input.
+
+- 1. ``\bar{\mathbf{X}} =\mathbf{Z}^ \mathbf{X}``
+- 2. ``\mathbf{L} = \bar{\mathbf{X}} \mathbf{Y}^\top``
+- 3. For each ``i`` ``\delta w_i  & = \mathbf{L} \mathbf{T}_{-k(i)}\mathbf{Z}``
+
+
+For a small image of size ``32x32`` and ``16`` input channels, this implementation leads to a memory reduction by a factor of ``2^{14-p}`` for ``r=2^p``. We then only need to allocate temporary memory for each layer for the probing vector that can be redrwan from a saved random generator seed. The forward-backward algorithm is summarized in Algorithm #ev_fwd_bck\.
 
 ### Algorithm: {#ev_fwd_bck}
 | Forward pass:
@@ -130,6 +148,8 @@ In this symmetrized expression, the shift are applied to the backpropagated resi
 | 4. Compute gradient ``\delta \mathbf{w} = \operatorname{tr}(\overline{\mathbf{X}}\, \overline{\mathbf{Y}}^\top)``
 : Forward-backward unbiased estimator via trace estimation.
 
+while this simple agorithm stands for single channel convolution, we design and implemented its multi channel version that compresses along the channel dimension. We show the full algorims in the annex.
+
 While a full network contains a variety of layer, the overall memory gains will not be as massive over the network. The overall saving will depend on the ratio of convolution to the other type of layers.
 
 # Experiments
@@ -141,7 +161,7 @@ In order to validate our method and provide a more rigorous evalation of its cmp
 - **Computational performance**. In this case we consider the computational runtime for a single convolution layer gradient for varying image size, batch size and number of channel. This benchmark is performed on CPU and GPU.
 - **Training**. This last experiments verifies that our unbiased estimator can be used to train convolutional networks and leads to good accuracy. We show the training on the MNIST dataset and show that, for large batch size, our estimator provides comparable accuracy to conventional training.
 
-## Accuracy and bias
+## Accuracy and variability
 
 We compute the gradient with respect to the filter of the standard image-to-image mean-square error ``\frac{1}{2}||C(X) - Y||^2`` where ``C`` is pure convolution layer ([Flux.jl](https://github.com/FluxML/NNlib.jl)) and ``Y`` is a batch of images from the CIFAR10 dataset. We consider two cases for ``X``. In the first case, ``X`` is a batch drawn from the CIFAR10 dataset as well while in the second case, ``X`` is a random variable drawn from ``\mathcal{N}(0, 1)``.
 
@@ -163,6 +183,9 @@ We show these gradients on Figures #bias-cifar10 and #bias-cifar10-rand\. These 
 
 ## Performance
 
+
+### Runtime 
+
 We show on Figure #cpu-bench and #gpu-bench the benchmarked runtime to compute a single gradient with NNlib and with our method for varying image sizes and batch sizes. The benchmark was done for a small (4 =>4) and large number of channel (32 =>32).
 
 #### Figure: {#cpu-bench}
@@ -182,6 +205,11 @@ These benchmarking results show that the proposed method leads to significant sp
 
 #### Figure: {#gpu-bench}
 ![B=4](figures/runtimes/bench_cpu_4_4.png){width=40%}
+
+
+### Network memory
+
+make the through network plots and results
 
 ## Training
 
@@ -211,20 +239,11 @@ These benchmarking results show that the proposed method leads to significant sp
 
 ### CIFAR10
 
-- resnet44
+- RAD network 
 - Quadro P1000 
 - 200 epochs
 - ps=64
-- SGD
-
-
-### Imagenet
-
-- resnet18
-- NC24 (4X K80), 12Gb memory per K80
-- batchsize 2048 with probing (64), 1024 without probing (can maybe fit ~1200)
-- 90 epochs
-- SGD, inital LR=.04
+- Adam
 
 
 # Implementation and code availability
@@ -239,3 +258,16 @@ The code and examples are available at [XConv](https://github.com/slimgroup/XCon
 - Fairly suboptimal implementation leads to less impressive results on GPU but can be improved
 
 # References
+
+# Annex
+
+## Multi-channel convolution
+
+
+In case o multiple channel, additional structure is required. We consider the forward comvolution:
+
+```
+
+```
+
+which gradient for a given input-output channel pair is given by Equation #original for a the slices of X and DY corresponding to these channels. In order to minimize memory and computation, we draw one probing matrix per input channel that will be reused for all correspondign output channels. In the forward pass, the computation the stays the same, projection the input. 
