@@ -9,33 +9,39 @@ bibliography:
 
 # refs
 
+
+@NEURIPS2019_9015 : pytorch
+@Flux
+@lightonproj
+
 Trace estimation as part of gaussian process:
-- http://papers.neurips.cc/paper/7985-gpytorch-blackbox-matrix-matrix-gaussian-process-inference-with-gpu-acceleration.pdf
+- @GPyTorch
 
 gradient approx in ML and other:
 
-- https://arxiv.org/pdf/1909.01311.pdf
-- https://arxiv.org/pdf/1911.04432.pdf
-- https://arxiv.org/pdf/1902.08651.pdf
-- http://journals.pan.pl/Content/109869/PDF/05_799-810_00925_Bpast.No.66-6_31.12.18_K2.pdf?handler=pdf
-- https://www.emc2-ai.org/assets/docs/isca-19/emc2-isca19-paper3.pdf
-- https://arxiv.org/pdf/1702.05419.pdf
-- https://arxiv.org/pdf/1609.04836.pdf
-- http://proceedings.mlr.press/v97/nokland19a/nokland19a.pdf
+- @DFA1
+- @oktay2020randomized : princeton RAD
+- @frenkel : DRTP, Error-Sign-Based DFA
+- @wangacccnn : randomized cnn gradient (zero dw, randn dw, top-k dy)
+- @nokland19a : TRaining with errors
+
+
+LR:
+- @TroppLR : streaminf algo for LR marices
+
+Large batch size:
+
+- @DBLP : large mini batch facebok (batch  Xk, lr Xk)
+- @LARS : large batch size ref paper and algo
+- @Pinckaers : streamed tile based conv for large images (8k)
 
 probing:
-- https://vtechworks.lib.vt.edu/bitstream/handle/10919/90402/Kaperick_BJ_T_2019.pdf?sequence=1&isAllowed=y
-- https://arxiv.org/abs/2005.10009
-- https://arxiv.org/pdf/2010.09649v4.pdf
 
-cudnn:
--http://people.csail.mit.edu/emer/papers/2017.03.arxiv.DNN_hardware_survey.pdf
--https://arxiv.org/abs/1410.0759
+- @Kaperick2019DiagonalEW : master thesis
+- @cortinovis2020randomized : trace estimate for indefinite matrix
+- @hutchpp, @Avron
 
-roofline:
-- https://arxiv.org/pdf/2009.05257.pdf
-- https://arxiv.org/pdf/2009.04598.pdf
-
+@2014cudnn
 
 # TODO
 
