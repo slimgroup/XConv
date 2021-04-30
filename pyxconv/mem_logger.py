@@ -61,11 +61,12 @@ def log_mem(model, inp, mem_log=None, exp=None):
         out = model(inp)
         loss = out.sum()
         loss.backward()
-    except e:
+    except Exception as e:
         print(f"Errored with error {e}")
     finally:
         [h.remove() for h in hr]
-        return mem_log
+    
+    return mem_log
 
 def plot_mem(
         df,
@@ -79,7 +80,7 @@ def plot_mem(
 ):
     if exps is None:
         exps = df.exp.drop_duplicates()
-    labels = {'std': 'Standard', 'relu': 'BReLU', 'conv': 'Probed', 'all': 'Probed+BReLU'}
+    labels = {'std': 'Standard', 'relu': 'BitReLU', 'conv': 'Probed', 'all': 'Probed+BitReLU'}
     fig, ax = plt.subplots(figsize=(10, 10))
 
     layer_list = []

@@ -43,12 +43,10 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     se = offs[-1]
     eend = N - 2*se
     # LRE as ncho x (N x ps)
-    LRe = LRe.view(ps, co, N) if N==1 else LRe.view(ps, co, N).narrow(2, se, eend)
+    LRe = LRe.view(ps, co, N)
     for i, o in enumerate(offs):
-        ev = e if N==1 else e.narrow(1, se+o, eend)
-        expr = oe.contract_expression("bjk,lkb", LRe.shape, ev.shape)
-        grad_weight[:, :, i] = expr(LRe, ev, backend='torch')
-        #grad_weight[:, :, i] = torch.einsum('bjk, lkb -> jl', LRe, ev)
+        ev = e if N==1 else e.roll(-int(o), dims=1)
+        grad_weight[:, :, i] = torch.einsum('bjk, lkb -> jl', LRe, ev)
     return grad_weight/ps
 
 
