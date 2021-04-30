@@ -7,6 +7,7 @@ bibliography:
     - probeml.bib
 ---
 
+{>> Title is shitty, redo<<}
 # refs
 
 
@@ -15,19 +16,22 @@ bibliography:
 @lightonproj
 
 Trace estimation as part of gaussian process:
+
 - @GPyTorch
 
 gradient approx in ML and other:
 
-- @DFA1
+- @DFA1, @han2019efficient : DFA
 - @oktay2020randomized : princeton RAD
 - @frenkel : DRTP, Error-Sign-Based DFA
 - @wangacccnn : randomized cnn gradient (zero dw, randn dw, top-k dy)
-- @nokland19a : TRaining with errors
-
+- @adelman2021faster : fast nn with approx, why should keep correct first layer
+- @nokland19a : Training with errors, per sub-block loss
+- @li2019happens : compressed sensing cnn
 
 LR:
-- @TroppLR : streaminf algo for LR marices
+
+- @TroppLR : streaming algo for LR marices
 
 Large batch size:
 
@@ -107,7 +111,7 @@ We can use this derivation, replacing ``\mathbf{A}`` by the outer product of the
 and ``z`` are ``M`` random probing vectors drawn from ``\mathcal{U}(-.5, .5)``. The sum is normalized by ``c_0`` to compensate for the variance of the shifted uniform distribution. In theory, Radamaecher or ``\mathcal{N}(0, 1)`` distibutions for ``z`` would provide better estimates of the trace, however, these distributions are a lot more expesnsive to draw from for large vectors and would impact the performance. Our choice of distribution is still acceptable since the probing vector ``z`` satisfies:
 
 ```math {#reqs}
-  \mathbb{E}(z) = 0, \ \ \mathbb{E}(z^\top z) = c_0
+  \mathbb{E}(z) = 0, \ \ \mathbb{E}(z^\top z) = c_0 \ \ \mathbb{E}(zz^\top) = \mathcal{I}
 ```
 
 and guaranties the unbiasing of our estimate.
@@ -213,8 +217,11 @@ These benchmarking results show that the proposed method leads to significant sp
 
 Following on the memory gains we introduced and demonstrated for convolutional layers in section #ref, we now consider full neural networks. In general term, the memory gain will be driven by the ratio of convolution layer in the network. Because our implementation is virtually memroy free ( ``\mathcal{O}(Mb)`` memory cost), we can estimate the totla memory gain to be equivalent to the ratio of convolution layer. We demonstrate that this estimates tands in practice on a several mainstream networks on Figure #nn-mem\.
 
-#### Figure: {#nn-mem}
-![B=4](figures/runtimes/bench_cpu_4_4.png){width=40%}
+#### Figure: {#bias-cifar10}
+![](figures/memory/squeezenet1_1.png){width=50%}
+![](figures/memory/squeezenet1_0.png){width=50%}\
+![](figures/memory/resnet18.png){width=50%}
+![](figures/memory/resnet50.png){width=50%}
 : Network memory usage for a single gradient. WE show the mory usage for known networks for low and high probe sizes for a fixed input size.
 
 We can see that the memroy usage of a network is effectively independent of the number of probing vectors due to the massive mempory gain incured by our estimator. In some cases, the memory usage is a bit higher than half of the true network due to in place `ReLU` layers. The layer would, in default configuration, be memory free relying on the following convolution layer to store the needed parameters for the backpropagation. Because we do not store these parameters anymore with out estimator, the memory usage of the in place layer is increased. We show that this can easily be offseted by only storing the necessary prameters as sing bits (`int8` in pytorch that does't support bit arrays). In summary, we the network memory usage is limited by other layers, however our estimator uses in general about half the mmeory of the standard network (for convolutional network) allowign to us tow ork with double the batch size for a fixed memroy budget. 
@@ -266,7 +273,7 @@ We show here two different training we each of our julia and pytorch implementat
 
 #### Figure: {#mnist-sls}
 ![B=4](figures/Acc_mnist.png){width=40%}
-: MNIST training for vraying batch sizes and probing sizes. This experiment is ran with the Stochastic Line Search algorithm (SLS, [@shmidpaper])
+: MNIST training for vraying batch sizes and probing sizes. This experiment is ran with the Stochastic Line Search algorithm (SLS, [@vaswani2019painless])
 
 ### CIFAR10
 
