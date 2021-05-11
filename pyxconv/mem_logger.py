@@ -1,10 +1,10 @@
-from torch.utils.checkpoint import checkpoint_sequential
 import torch
 import nvidia_smi
 from matplotlib import pyplot as plt
 plt.rcParams.update({'font.size': 20})
 
 __all__ = ['log_mem', 'plot_mem']
+
 
 def _get_gpu_mem(synchronize=True, empty_cache=True):
     handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
@@ -57,17 +57,18 @@ def log_mem(model, inp, mem_log=None, exp=None):
     hr = []
     for idx, module in enumerate(model.modules()):
         _add_memory_hooks(idx, module, mem_log, exp, hr)
-    
-    #try:
-    out = model(inp)
-    loss = out.sum()
-    loss.backward()
-    #except Exception as e:
-    #    print(f"Errored with error {e}")
-    #finally:
-    [h.remove() for h in hr]
-    
+
+    try:
+        out = model(inp)
+        loss = out.sum()
+        loss.backward()
+    except Exception as e:
+        print(f"Errored with error {e}")
+    finally:
+        [h.remove() for h in hr]
+
     return mem_log
+
 
 def plot_mem(
         df,
@@ -81,7 +82,8 @@ def plot_mem(
 ):
     if exps is None:
         exps = df.exp.drop_duplicates()
-    labels = {'std': 'Standard', 'relu': 'BitReLU', 'conv': 'Probed', 'all': 'Probed+BitReLU'}
+    labels = {'std': 'Standard', 'relu': 'BitReLU', 'conv': 'Probed',
+              'all': 'Probed+BitReLU'}
     fig, ax = plt.subplots(figsize=(10, 10))
 
     layer_list = []
@@ -97,13 +99,17 @@ def plot_mem(
             df_.mem_all = mem_all / 2 ** 30
 
         layer_idx = 0
-        callidx_fwd = df_[(df_["layer_idx"] == layer_idx) & (df_["hook_type"] == "fwd")]["call_idx"].iloc[0]
+        callidx_fwd = df_[(df_["layer_idx"] == layer_idx) and
+                          (df_["hook_type"] == "fwd")]["call_idx"].iloc[0]
         if filter_fwd:    
             df_ = df_[df_["call_idx"] <= callidx_fwd]
 
-        plot = df_.plot(ax=ax, y='call_idx', x='mem_all', ylabel='Layer', xlabel='Memory (Gb)', label=labels[exp], fontsize=20, linewidth=4)
+        plot = df_.plot(ax=ax, y='call_idx', x='mem_all', ylabel='Layer',
+                        xlabel='Memory (Gb)', label=labels[exp],
+                        fontsize=20, linewidth=4)
         plot.axhline(y=callidx_fwd)
-        layer_list = list(df_.layer_type) if len(df_.layer_type) > len(layer_list) else layer_list
+        if len(df_.layer_type) > len(layer_list):
+            layer_list = list(df_.layer_type)
     
     ax.set_yticks(range(0, len(layer_list)))
     ax.set_ylim(len(layer_list), 0)

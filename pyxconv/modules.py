@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+
 import pyxconv
 
 __all__ = ['Xconv2D', 'Xconv3D']
@@ -14,26 +15,31 @@ brelu = pyxconv.funcs.Brelu.apply
 
 
 class Xconv2D(torch.nn.modules.conv.Conv2d):
-    def __init__(self, *args, ps=8, **kwargs):
-        super(Xconv2D, self).__init__(*args,**kwargs)
+    def __init__(self, *args, ps=8, mode='features', **kwargs):
+        super(Xconv2D, self).__init__(*args, **kwargs)
         self.ps = ps
+        self.mode = mode
 
     def forward(self, input):
         if self.ps > 0:
-            return conv2d(input, self.weight, self.ps, self.bias, self.stride,
+            return conv2d(input, self.weight, self.ps, self.mode, self.bias, self.stride,
                           self.padding, self.dilation, self.groups)
         return F.conv2d(input, self.weight, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
 
 class Xconv3D(torch.nn.modules.conv.Conv3d):
-    def __init__(self, *args, ps=8, **kwargs):
-        super(Xconv3D, self).__init__(*args,**kwargs)
+    def __init__(self, *args, ps=8, mode='features', **kwargs):
+        super(Xconv3D, self).__init__(*args, **kwargs)
         self.ps = ps
+        self.mode = mode
 
     def forward(self, input):
-        return conv3d(input, self.weight, self.ps, self.bias, self.stride,
-                      self.padding, self.dilation, self.groups)
+        if self.ps > 0:
+            return conv3d(input, self.weight, self.ps, self.mode, self.bias, self.stride,
+                          self.padding, self.dilation, self.groups)
+        return F.conv3d(input, self.weight, self.bias, self.stride,
+                        self.padding, self.dilation, self.groups)
 
 
 class BReLU(torch.nn.ReLU):
