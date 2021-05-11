@@ -4,7 +4,7 @@ from typing import Tuple
 __all__ = ['convert_net', 'update_ps', 'dilate2d', 'dilate3d', 'offsets2d', 'offsets3d']
 
 
-def convert_net(module, name='net', ps=16, mode='all'):
+def convert_net(module, name='net', ps=16, mode='all', maxc=32001):
     """
     Recursively replaces all nn.Conv2d by XConv2D
 
@@ -13,17 +13,18 @@ def convert_net(module, name='net', ps=16, mode='all'):
     # iterate through immediate child modules. Note, the recursion is done by our code no need to use named_modules()
     for child_name, child in module.named_children():
         if isinstance(child, torch.nn.Conv2d) and mode in ['all', 'conv']:
-            b = child.bias is not None
-            newconv = Xconv2D(child.in_channels, child.out_channels,
-                              child.kernel_size, ps=ps, stride=child.stride,
-                              padding=child.padding, bias=b)
-            newconv.weight = child.weight
-            newconv.bias = child.bias
-            setattr(module, child_name, newconv)
+            if child.in_channels < maxc and child.out_channels < maxc:
+                b = child.bias is not None
+                newconv = Xconv2D(child.in_channels, child.out_channels,
+                                  child.kernel_size, ps=ps, stride=child.stride,
+                                  padding=child.padding, bias=b)
+                newconv.weight = child.weight
+                newconv.bias = child.bias
+                setattr(module, child_name, newconv)
         elif isinstance(child, torch.nn.ReLU) and mode in ['all', 'relu']:
             setattr(module, child_name, BReLU(inplace=child.inplace))
         else:
-            convert_net(child, child_name, ps=ps, mode=mode)
+            convert_net(child, child_name, ps=ps, mode=mode, maxc=maxc)
 
 
 def update_ps(module, ps):
@@ -39,7 +40,13 @@ def update_ps(module, ps):
 def dilate2d(y, co: int, N: Tuple[int, int], b: int, stride: Tuple[int, int]):
     sx, sy = stride
     if sx == 1 and sy == 1:
-        return y
+        if y.shape[2:] == N:
+            return y
+        else:
+            n = y.shape[2:4]
+            pad_sizes = ((N[0]-n[0])//2, (N[0]-n[0])//2+(N[0]-n[0])%2,
+                         (N[1]-n[1])//2, (N[1]-n[1])//2+(N[1]-n[1])%2)
+            return torch.nn.functional.pad(y, pad_sizes)
     yd = torch.zeros(b, co, *N, device=y.device)
     yd[:, :, ::sx, ::sy][:, :, :y.shape[2], :y.shape[3]] = y
     return yd
@@ -50,6 +57,7 @@ def dilate3d(y, co: int, N: Tuple[int, int, int], b: int, stride: Tuple[int, int
     sx, sy, sz = stride
     if sx == 1 and sy == 1 and sz == 1:
         return y
+
     yd = torch.zeros(b, co, *N, device=y.device)
     yd[:, :, ::sx, ::sy, ::sz][:, :, :y.shape[2], :y.shape[3], :y.shape[4]] = y
     return yd
@@ -64,7 +72,7 @@ def offsets3d(N: Tuple[int, int, int], nw: int):
 
 def offsets2d(N: Tuple[int, int], nw: int):
     nx, ny = N
-    r = torch.arange(-(nw//2), nw//2+1)
+    r = torch.arange(-(nw//2), nw//2+nw%2)
     offs = [i + j*nx for j in r for i in r]
     return offs
 

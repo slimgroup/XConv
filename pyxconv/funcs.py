@@ -7,7 +7,7 @@ import opt_einsum as oe
 from pyxconv.utils import *
 
 
-#@torch.jit.script
+@torch.jit.script
 def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
                offs: List[int], grad_output, eX):
     """
@@ -35,7 +35,6 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     # Y' X e
     Ye = grad_output.view(b, -1)
     LRe = torch.mm(eX.t(), Ye)
-
     # Init gradien
     grad_weight = torch.zeros(co, ci, nw, device=eX.device)
 
@@ -75,6 +74,7 @@ class Xconv2D(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, ps=8, bias=None, stride=1, padding=0,
                 dilation=1, groups=1):
+
         seed = torch.randint(100000, (1,))
         torch.random.manual_seed(seed)
         b, ci, nx, ny = input.shape
@@ -99,7 +99,6 @@ class Xconv2D(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         eX, seed, weight, bias = ctx.saved_tensors
-
         dw = None
         if ctx.needs_input_grad[1]:
             nw = weight.shape[2]
@@ -120,8 +119,8 @@ class Xconv2D(torch.autograd.Function):
 
         db = None
         if bias is not None and ctx.needs_input_grad[3]:
-            db = grad_output.sum((0, 2, 3)).squeeze(0)
-
+            db = grad_output.sum((0, 2, 3))
+        
         return dx, dw, None, db, None, None, None, None
 
 
@@ -176,7 +175,7 @@ class Xconv3D(torch.autograd.Function):
         db = None
         if bias is not None and ctx.needs_input_grad[3]:
             db = grad_output.sum((0, 2, 3, 4)).squeeze(0)
-
+        
         return dx, dw, None, db, None, None, None, None
 
 class Brelu(torch.autograd.Function):

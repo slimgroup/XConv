@@ -20,12 +20,13 @@ def _generate_mem_hook(handle_ref, mem, idx, hook_type, exp):
             call_idx = 0
         else:
             call_idx = mem[-1]["call_idx"] + 1
-
+        
         mem_all = _get_gpu_mem()
         torch.cuda.synchronize()
         lname = type(self).__name__
         lname = 'conv' if 'conv' in lname.lower() else lname
         lname = 'ReLU' if 'relu' in lname.lower() else lname
+        
         mem.append({
             'layer_idx': idx,
             'call_idx': call_idx,
@@ -57,14 +58,14 @@ def log_mem(model, inp, mem_log=None, exp=None):
     for idx, module in enumerate(model.modules()):
         _add_memory_hooks(idx, module, mem_log, exp, hr)
     
-    try:
-        out = model(inp)
-        loss = out.sum()
-        loss.backward()
-    except Exception as e:
-        print(f"Errored with error {e}")
-    finally:
-        [h.remove() for h in hr]
+    #try:
+    out = model(inp)
+    loss = out.sum()
+    loss.backward()
+    #except Exception as e:
+    #    print(f"Errored with error {e}")
+    #finally:
+    [h.remove() for h in hr]
     
     return mem_log
 
