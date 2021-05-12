@@ -57,7 +57,8 @@ probing:
 
 ## Abstract
 
-bonjour
+With the increasing size of machine learning datasets and the corresponding neural networks, early computational choices are reaching their limits. One of the main cost of a neiral network is the requirement to store the state variable for backpropgation. Such memory requirement does not scale to accelerators for large datasets or large images without an exponential resources increase (.5M$ worth of hardware for large imagenet with large batch size). In this work, we take inspiration from ranomized linear algebra, where algorithm that only requires the action of a matrix, rather than the matrix itself, led to linear aglebra capabilites beyond the limits of dense matrices. We will show that we can cast the backpropgation through a convolution layer as a the computation of the trace of a massive matrix. Following recent work in randomized linear algebra, this trace be computed with an unbiased algorithm that only requires a limited number of matrix-vector products. We designed and implemented this trace estimation algorithm such that it's memory imprint is near negligeable effectively reducing the memory cost of a convolution network by a factor of 2 in average.
+
 
 ## Introduction
 

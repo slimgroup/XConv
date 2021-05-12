@@ -9,7 +9,7 @@ import cifarconvnet
 
 import matplotlib.pyplot as plt
 
-ci, co, b, k, ps = 3, 3, 256, 5, 64
+ci, co, b, k, ps = 3, 3, 256, 5, 128
 
 train_transform = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
@@ -88,14 +88,14 @@ loss2.backward()
 print(y1 - y2)
 
 
-def get_gw(net, c):
-    return ni(getattr(net, c).weight.grad)
+def get_gw(net, c, n=200):
+    return ni(getattr(net, c).weight.grad.reshape(-1)[:200])
 
 plt.figure(figsize=(12, 8))
 for i, c in enumerate([f'conv{i}' for i in range(1, 5)]):
     plt.subplot(2,2,i+1)
-    plt.plot(get_gw(net, c)[:200], label="true")
-    plt.plot(get_gw(net2, c)[:200], label="probed")
+    plt.plot(get_gw(net, c, n=200), label="true")
+    plt.plot(get_gw(net2, c, n=200), label="probed")
     plt.title(c)
     plt.legend()
 plt.tight_layout()
