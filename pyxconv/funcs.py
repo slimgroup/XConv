@@ -7,7 +7,25 @@ import opt_einsum as oe
 from pyxconv.utils import *
 
 
-#@torch.jit.script
+@torch.jit.script
+def filter(a, indf):
+    # take fft
+    f = torch.fft.rfft(a, dim=1)
+    newf = 0*f
+    # Set all but this ind to zero
+    newf[:, indf] = f[:, indf]
+    return torch.fft.irfft(newf, dim=1)
+
+
+@torch.jit.script
+def draw_e(N: int, ci: int, ps: int, base_r):
+    n = max(ps//(2*ci), 2)
+    mat = torch.stack([filter(base_r, torch.randperm(ps//2, dtype=torch.long)[1:n])
+                       for i in range(ci)])
+    return ps//n * mat
+
+
+@torch.jit.script
 def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
                offs: List[int], grad_output, eX):
     """
@@ -30,7 +48,8 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     """
     # Redraw e
     torch.random.manual_seed(seed)
-    e = torch.randn(ci, N, ps, device=eX.device)
+    base_r = torch.randn(N, ps, device=eX.device)
+    e = draw_e(N, ci, ps, base_r).view(ci, N, ps)
 
     # Y' X e
     Ye = grad_output.view(b, -1)
@@ -63,10 +82,12 @@ def fwd_probe(ps: int, ci: int, N: int, X):
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
     Xv = X.reshape(X.shape[0], -1)
-    e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
+    base_r = torch.randn(N, ps, device=X.device)
+    e = draw_e(N, ci, ps, base_r).view(ci*N, ps)
+
     eX = torch.empty(X.shape[0], ps, device=X.device)
+
     torch.mm(Xv, e, out=eX)
-    
     return eX
 
 
