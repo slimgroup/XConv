@@ -9,7 +9,7 @@ import cifarconvnet
 
 import matplotlib.pyplot as plt
 
-ci, co, b, k, ps = 3, 3, 256, 5, 64
+ci, co, b, k, ps = 3, 3, 256, 5, 256
 
 train_transform = transforms.Compose([
     transforms.RandomCrop(32, padding=4),

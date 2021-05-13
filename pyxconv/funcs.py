@@ -14,15 +14,15 @@ def filter(a, indf):
     newf = 0*f
     # Set all but this ind to zero
     newf[:, indf] = f[:, indf]
-    return torch.fft.irfft(newf, dim=1)
-
+    filtered = torch.fft.irfft(newf, dim=1)
+    return torch.sqrt(a.shape[1]/(4*indf.shape[0])) * filtered
 
 @torch.jit.script
 def draw_e(N: int, ci: int, ps: int, base_r):
     n = max(ps//(2*ci), 2)
-    mat = torch.stack([filter(base_r, torch.randperm(ps//2, dtype=torch.long)[1:n])
+    mat = torch.stack([filter(base_r, torch.randperm(ps//2, dtype=torch.long)[:n])
                        for i in range(ci)])
-    return ps//n * mat
+    return mat
 
 
 @torch.jit.script
@@ -48,7 +48,7 @@ def back_probe(seed: int, N: int, ci: int, co: int, b: int, ps: int, nw: int,
     """
     # Redraw e
     torch.random.manual_seed(seed)
-    base_r = torch.randn(N, ps, device=eX.device)
+    base_r = torch.sign(torch.randn(N, ps, device=eX.device))
     e = draw_e(N, ci, ps, base_r).view(ci, N, ps)
 
     # Y' X e
@@ -82,7 +82,7 @@ def fwd_probe(ps: int, ci: int, N: int, X):
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
     Xv = X.reshape(X.shape[0], -1)
-    base_r = torch.randn(N, ps, device=X.device)
+    base_r = torch.sign(torch.randn(N, ps, device=X.device))
     e = draw_e(N, ci, ps, base_r).view(ci*N, ps)
 
     eX = torch.empty(X.shape[0], ps, device=X.device)
