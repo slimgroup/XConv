@@ -57,7 +57,8 @@ probing:
 
 ## Abstract
 
-bonjour
+Machine learning has had tremendous success thanks to state-of-the-art accelerators computational libraries and computational hardware development. However, the algorithm choices heavily rely on automatic differentiation that comes at a very high memory cost ill-suited for low memory accelerators such as GPUs. However, recent work in machine learning and stochastic optimization has shown that exact sensitivities aren't always necessary and that stochasticity can improve the learning. Based on these observations, we proposed an unbiased randomized convolution backpropagation with theoretical error bounds estimates to drastically reduce the memory cost of one of the most used network layer. We take inspiration from randomized linear algebra, where algorithms that only require the action of a matrix rather than the matrix itself, led to linear algebra capabilities beyond the limits of dense matrices. We will show that we can cast the backpropgation through a convolution layer as the computation of the trace of a massive matrix and in a more general way as the directional probing of high dimensional tensors. We designed and implemented (in pytorch and Julia) this trace estimation algorithm such that its memory imprint is near negligible effectively reducing the memory cost of a convolution layer by a factor of X10-X100 and of a conventional network by a factor of about 2X.
+
 
 ## Introduction
 
