@@ -4,7 +4,7 @@ import contextlib
 from typing import Tuple
 
 __all__ = ['convert_net', 'update_ps', 'dilate2d', 'dilate3d', 'offsets2d', 'offsets3d',
-           'random_seed_torch']
+           'random_seed_torch', 'update_mode']
 
 
 def convert_net(module, name='net', ps=16, xmode='all', mode='all', maxc=32001):

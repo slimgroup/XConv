@@ -58,7 +58,7 @@ class Xconv2D(torch.autograd.Function):
                                             dilation=ctx.dilation, groups=ctx.groups)
 
         db = None
-        if bias is not None and ctx.needs_input_grad[3]:
+        if bias is not None and ctx.needs_input_grad[4]:
             db = grad_output.sum((0, 2, 3))
 
         return dx, dw, None, None, db, None, None, None, None
@@ -116,7 +116,7 @@ class Xconv3D(torch.autograd.Function):
                                             dilation=ctx.dilation, groups=ctx.groups)
 
         db = None
-        if bias is not None and ctx.needs_input_grad[3]:
+        if bias is not None and ctx.needs_input_grad[4]:
             db = grad_output.sum((0, 2, 3, 4))
 
         return dx, dw, None, None, db, None, None, None, None
