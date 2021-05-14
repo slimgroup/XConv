@@ -59,7 +59,7 @@ class Xconv2D(torch.autograd.Function):
 
         db = None
         if bias is not None and ctx.needs_input_grad[3]:
-            db = grad_output.sum((0, 2, 3)).squeeze(0)
+            db = grad_output.sum((0, 2, 3))
 
         return dx, dw, None, None, db, None, None, None, None
 
@@ -117,7 +117,7 @@ class Xconv3D(torch.autograd.Function):
 
         db = None
         if bias is not None and ctx.needs_input_grad[3]:
-            db = grad_output.sum((0, 2, 3, 4)).squeeze(0)
+            db = grad_output.sum((0, 2, 3, 4))
 
         return dx, dw, None, None, db, None, None, None, None
 

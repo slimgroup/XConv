@@ -10,6 +10,7 @@ import cifarconvnet
 import matplotlib.pyplot as plt
 
 ci, co, b, k, ps = 3, 3, 256, 5, 128
+xmode = 'all'
 
 train_transform = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
@@ -22,7 +23,7 @@ train_sampler = torch.utils.data.RandomSampler(dataset1, replacement=False)
 train_loader = torch.utils.data.DataLoader(dataset1, batch_size=b, sampler=train_sampler)
 
 r1 = torch.nn.Conv2d(ci, co, k, bias=False, stride=1, padding=2)
-r2 = Xconv2D(ci, co, k, ps=ps, bias=False, stride=1, padding=2)
+r2 = Xconv2D(ci, co, k, ps=ps, mode=xmode, bias=False, stride=1, padding=2)
 r2.weight = copy.deepcopy(r1.weight)
 
 xc = iter(train_loader).next()[0]
@@ -71,7 +72,7 @@ net = cifarconvnet.CIFARConvNet()
 
 net2 = copy.deepcopy(net)
 net3 = copy.deepcopy(net)
-convert_net(net2, 'net', ps=ps, mode='all')
+convert_net(net2, 'net', ps=ps, mode='all', xmode=xmode)
 
 xt, target = iter(train_loader).next()
 
