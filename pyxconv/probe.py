@@ -4,6 +4,24 @@ from typing import List
 
 
 @torch.jit.script
+def rand_with_zeros(N: int, n:int, ps:int, indices, X):
+    a = torch.zeros(N, ps, device=X.device)
+    a[:, indices] = torch.randn(N, n, device=X.device)
+    return a
+
+
+@torch.jit.script
+def draw_e(ps:int, ci: int, N: int, X):
+    if ps//ci > 8:
+        n = ps // ci
+        inds = torch.split(torch.randperm(ps, dtype=torch.long), n)
+    else:
+        n = 8
+        inds = [torch.randint(low=0, high=ps, size=(n,), dtype=torch.long) for _ in range(ci)]
+    e = torch.cat([rand_with_zeros(N, n, ps, inds[i], X) for i in range(ci)], dim=0)
+    return torch.sqrt(ps/n)*e
+
+@torch.jit.script
 def back_probe_f(N: int, ci: int, co: int, b: int, ps: int, nw: int,
                 offs: List[int], grad_output, eX):
     """
@@ -59,7 +77,8 @@ def back_probe_a(N: int, ci: int, co: int, b: int, ps: int, nw: int,
         gradient w.r.t convolution filter
     """
     # Redraw e
-    e = torch.randn(ci, N, ps, device=eX.device)
+    # e = torch.randn(N, ps, ci, device=eX.device)
+    e = draw_e(ps, ci, N, eX).view(ci, N, ps)
 
     # Y' X e
     Ye = grad_output.view(b, -1)
@@ -102,8 +121,9 @@ def fwd_probe_a(ps: int, b: int, ci: int, N: int, X):
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
     Xv = X.reshape(b, -1)
-    e = torch.randn(ci, N, ps, device=X.device).view(ci*N, ps)
-    return torch.mm(Xv, e)
+    e = draw_e(ps, ci, N, X)
+
+    return torch.mm(Xv, e.reshape(ci*N, ps))
 
 
 back_probe = {'all': back_probe_a, 'features': back_probe_f}

@@ -1,8 +1,9 @@
 ---
-title: Efficient unbiased backpropagation via matrix probing for filter updates.
+title: Low-memory stochastic backpropagation with multi-channel randomized trace estimation.
 author: |
-  Mathias Louboutin^1^, Felix J. Herrmann^1^, Ali Siahkoohi^1^ \
-  ^1^School of Computational Science and Engineering, Georgia Institute of Technology\
+  Mathias Louboutin^1^, Ali Siahkoohi^1^, Rongrong Wang^2^, Felix J. Herrmann^1^\
+  ^1^ School of Computational Science and Engineering, Georgia Institute of Technology\
+  ^2^ Department of Mathematics, Michigan State University
 bibliography:
     - probeml.bib
 ---
@@ -57,7 +58,7 @@ probing:
 
 ## Abstract
 
-Machine learning has had tremendous success thanks to state-of-the-art accelerators computational libraries and computational hardware development. However, the algorithm choices heavily rely on automatic differentiation that comes at a very high memory cost ill-suited for low memory accelerators such as GPUs. However, recent work in machine learning and stochastic optimization has shown that exact sensitivities aren't always necessary and that stochasticity can improve the learning. Based on these observations, we proposed an unbiased randomized convolution backpropagation with theoretical error bounds estimates to drastically reduce the memory cost of one of the most used network layer. We take inspiration from randomized linear algebra, where algorithms that only require the action of a matrix rather than the matrix itself, led to linear algebra capabilities beyond the limits of dense matrices. We will show that we can cast the backpropgation through a convolution layer as the computation of the trace of a massive matrix and in a more general way as the directional probing of high dimensional tensors. We designed and implemented (in pytorch and Julia) this trace estimation algorithm such that its memory imprint is near negligible effectively reducing the memory cost of a convolution layer by a factor of X10-X100 and of a conventional network by a factor of about 2X.
+Thanks to the combination of state-of-the-art accelerators and highly optimized open software frameworks there has been tremendous progress in the performance of deep neural networks. While these developments have been responsible for many breakthroughs, progress towards solving large scale problems, such as video encoding and semantic segmentation in 3D, is hampered because access to on-premise memory is often limited. Instead of relying on (optimal) checkpointing or invertibility of the network layers – to recover the state variables during backpropagation – we propose to approximate the gradient of convolutional neural nets with a multi-channel randomized trace estimation technique. Compared to other methods, this approach is simple, easy to analyze, and leads to a greatly reduced memory footprint. Even though the randomized trace estimation introduces stochasticity during training, we argue that this is of little consequence as long as the induced errors are of the same order as errors in the gradient due to the use of stochastic gradient descent. We discuss the performance of networks trained with stochastic backpropagation and how the error can be controlled while maximizing memory usage and minimizing computational overhead.
 
 
 ## Introduction
