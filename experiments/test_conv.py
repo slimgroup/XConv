@@ -38,7 +38,7 @@ xr = torch.randn(xc.shape)
 
 def ni(inp):
     # print(torch.norm(inp, float('inf')))
-    n = 1#torch.norm(inp, float('inf'))
+    n = torch.norm(inp, float('inf'))
     return (inp/n).detach().numpy().reshape(-1)
 
 i=1

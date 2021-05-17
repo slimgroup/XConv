@@ -4,22 +4,23 @@ from typing import List
 
 
 @torch.jit.script
-def rand_with_zeros(N: int, n:int, ps:int, indices, X):
+def rand_with_zeros(N: int, ps:int, indices, X):
+    n = indices.shape[0]
     a = torch.zeros(N, ps, device=X.device)
     a[:, indices] = torch.randn(N, n, device=X.device)
-    return a
+    return torch.sqrt(ps/n)*a
 
 
 @torch.jit.script
 def draw_e(ps:int, ci: int, N: int, X):
-    if ps//ci > 8:
+    if ps // ci > 8:
         n = ps // ci
         inds = torch.split(torch.randperm(ps, dtype=torch.long), n)
     else:
         n = 8
-        inds = [torch.randint(low=0, high=ps, size=(n,), dtype=torch.long) for _ in range(ci)]
-    e = torch.cat([rand_with_zeros(N, n, ps, inds[i], X) for i in range(ci)], dim=0)
-    return torch.sqrt(ps/n)*e
+        inds = torch.split(torch.randperm(n*ci, dtype=torch.long) % ps, n)
+    e = torch.cat([rand_with_zeros(N, ps, inds[i], X) for i in range(ci)], dim=0)
+    return e
 
 @torch.jit.script
 def back_probe_f(N: int, ci: int, co: int, b: int, ps: int, nw: int,
