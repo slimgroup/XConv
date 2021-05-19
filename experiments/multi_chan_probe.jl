@@ -2,18 +2,19 @@ using LinearAlgebra, PyPlot, Random, FFTW, Distributions, CircularArrays, Printf
 
 close(:all)
 
-ci, co, N, ps, b = 32, 32, 1024, 128, 50
+ci, co, N, ps, b = 16, 16, 256, 64, 50
+plot_I = false
 
 eb = randn(Float32, co*N, ps)
 
 chunk(arr, n) = [arr[i:min(i + n - 1, end)] for i in 1:n:length(arr)]
 simil(x, y) = 100*dot(x[:], y[:])/(norm(x)*norm(y))
-error(x, y) = norm(x - y)/norm(x)
+error(x, y) = norm(x - y)/(norm(x)+norm(y))
 
 function draw_e(ps::Integer, co::Integer, N::Integer)
     n = ps ÷ co
-    if n < 8
-        n = 8
+    if n < 4
+        n = 4
         inds = chunk(randperm(n*co) .% ps .+ 1, n)
         overlap = n / (ps ÷ co)
     else
@@ -32,29 +33,41 @@ end
 
 eortho = draw_e(ps, co, N)
 
-# figure()
-# subplot(221)
-# imshow(eb, vmin=-ps/10, vmax=ps/10, cmap="seismic", aspect="auto")
-# title("Z, Random")
-# subplot(222)
-# imshow(eortho, vmin=-ps/10, vmax=ps/10, cmap="seismic", aspect="auto")
-# title("Z, Random Orthogonalized")
-# subplot(223)
-# imshow(eb*eb', vmin=-ps/10, vmax=ps/10, cmap="seismic", aspect="auto")
-# title(L"$ZZ^T$ Random")
-# subplot(224)
-# imshow(eortho*eorthot, vmin=-ps/10, vmax=ps/10, cmap="seismic", aspect="auto")
-# title(L"$ZZ^T$ Random Orthogonalized")
-# tight_layout()
+if plot_I
+    plot_e_scale = ps/50
+    figure()
+    subplot(221)
+    imshow(eb, vmin=-.1, vmax=.1, cmap="seismic", aspect="auto")
+    title("Z, Random")
+    subplot(222)
+    imshow(eortho, vmin=-.1, vmax=.1, cmap="seismic", aspect="auto")
+    title("Z, Random Orthogonalized")
+    subplot(223)
+    imshow(eb*eb', vmin=-plot_e_scale, vmax=plot_e_scale, cmap="seismic", aspect="auto")
+    title(L"$ZZ^T$ Random")
+    subplot(224)
+    imshow(eortho*eortho', vmin=-plot_e_scale, vmax=plot_e_scale, cmap="seismic", aspect="auto")
+    title(L"$ZZ^T$ Random Orthogonalized")
+    tight_layout()
+    savefig("./figures/zortho.png", bbox_inches="tight")
+end
 
 ####### PROBE 3D Tensore with it
 
-function rescale(A::outer_LR, tr_est::Matrix{T}) where T
-    # In practice can be done in the same way as probing, get mean of X in forward then backward
-    est_scale =sum(mean(A.L[1:N, :], dims=1).*A.R[1:N, :])
-    act_scale = tr_est[1, 1]
-    return est_scale/act_scale .* tr_est
+# Simple X Y^T struct to avoid blowing up memory
+struct outer_LR
+    L
+    R
 end
+
+Base.:*(A::outer_LR, x) = A.L*(A.R'*x)
+Base.:*(x, A::outer_LR) = (x*A.L)*A.R'
+block(A::outer_LR, i, j) = view(A.L, (i-1)*N+1:i*N, :) * view(A.R, (j-1)*N+1:j*N, :)'
+
+a = vcat([rand(-5:5) * rand(Float32, N, b) for i=1:ci]...)
+
+A = outer_LR(a, max.(0f0, 100 .* randn(Float32, N*co, b)))
+
 
 function probe_trace(ci::Integer, co::Integer, N::Integer, A::outer_LR, e::Matrix{T}) where T
     # A * z
@@ -69,25 +82,6 @@ function probe_trace(ci::Integer, co::Integer, N::Integer, A::outer_LR, e::Matri
     end
     return trl
 end
-
-
-struct outer_LR
-    L
-    R
-end
-
-Base.:*(A::outer_LR, x) = A.L*(A.R'*x)
-Base.:*(x, A::outer_LR) = (x*A.L)*A.R'
-block(A::outer_LR, i, j) = view(A.L, (i-1)*N+1:i*N, :) * view(A.R, (j-1)*N+1:j*N, :)'
-
-a = vcat([rand(-5:5) * randn(Float32, N, b) for i=1:ci]...)
-
-A = outer_LR(a, max.(0f0, 100 .* randn(Float32, N*co, b)))
-# figure()
-# imshow(A, cmap="seismic", vmin=-1, vmax=1)
-# colorbar()
-# title(L"XY^T")
-
 true_tr = zeros(Float32, ci, co)
 [true_tr[i, j] = LinearAlgebra.tr(block(A, i, j)) for i=1:ci for j=1:co]
 
@@ -111,7 +105,7 @@ end
 plot_tr(trr, tro, true_tr)
 
 # Mean
-np = 50
+np = 5000
 
 convergence = zeros(Float32, np, 2)
 similarity = zeros(Float32, np, 2)
@@ -155,9 +149,9 @@ loglog(convergence[1:np, 1], label="Error random")
 loglog(convergence[1:np, 2], label="Error random ortho")
 legend()
 subplot(212)
-loglog(similarity[1:np, 1], label="Similarity random")
-loglog(similarity[1:np, 2], label="Similarity random ortho")
-ylim([25.0, 100.0])
+plot(similarity[1:np, 1], label="Similarity random")
+plot(similarity[1:np, 2], label="Similarity random ortho")
+yticks([i*10 for i=0:2:10], labels=["$(i*10)%" for i=0:2:10])
 legend()
 
 

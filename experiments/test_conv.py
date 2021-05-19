@@ -14,8 +14,9 @@ import matplotlib.pyplot as plt
 # all
 # 2r x batch i.e ci/2 cheaper
 
+torch.manual_seed(123)
 
-ci, co, b, k, ps = 3, 3, 256, 5, 64
+ci, co, b, k, ps = 3, 3, 128, 5, 2048
 
 train_transform = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
@@ -29,16 +30,18 @@ train_loader = torch.utils.data.DataLoader(dataset1, batch_size=b, sampler=train
 
 r1 = torch.nn.Conv2d(ci, co, k, bias=False, stride=1, padding=2)
 r2 = Xconv2D(ci, co, k, ps=ps, mode='features', bias=False, stride=1, padding=2)
-r3 = Xconv2D(ci, co, k, ps=4*ps, mode='all', bias=False, stride=1, padding=2)
+r3 = Xconv2D(ci, co, k, ps=ps, mode='all', bias=False, stride=1, padding=2)
+r4 = Xconv2D(ci, co, k, ps=ps, mode='ortho', bias=False, stride=1, padding=2)
 r2.weight = copy.deepcopy(r1.weight)
 r3.weight = copy.deepcopy(r1.weight)
+r4.weight = copy.deepcopy(r1.weight)
 
 xc = iter(train_loader).next()[0]
 xr = torch.randn(xc.shape)
 
 def ni(inp):
     # print(torch.norm(inp, float('inf')))
-    n = torch.norm(inp, float('inf'))
+    n = 1#torch.norm(inp, float('inf'))
     return (inp/n).detach().numpy().reshape(-1)
 
 i=1
@@ -53,6 +56,8 @@ for (inp, namein) in zip([xc, xr], ['C10', '\mathcal{N}(0, 1)']):
             g2 = y2.grad_fn.apply(y2)
             y3 = r3(inp)
             g3 = y3.grad_fn.apply(y3)
+            y4 = r4(inp)
+            g4 = y4.grad_fn.apply(y4)
         elif nameout == 'C10':
             y = iter(train_loader).next()[0]
             y1 = r1(inp)
@@ -61,6 +66,8 @@ for (inp, namein) in zip([xc, xr], ['C10', '\mathcal{N}(0, 1)']):
             g2 = y2.grad_fn.apply(y)
             y3 = r3(inp)
             g3 = y3.grad_fn.apply(y)
+            y4 = r4(inp)
+            g4 = y4.grad_fn.apply(y)
         else:
             y = torch.randn(xc.shape)
             y1 = r1(inp)
@@ -69,60 +76,56 @@ for (inp, namein) in zip([xc, xr], ['C10', '\mathcal{N}(0, 1)']):
             g2 = y2.grad_fn.apply(y)
             y3 = r3(inp)
             g3 = y3.grad_fn.apply(y)
+            y4 = r4(inp)
+            g4 = y4.grad_fn.apply(y)
 
         plt.subplot(2,3,i)
         plt.plot(ni(g1[1])[:200], label="true")
         plt.plot(ni(g2[1])[:200], label="per feature")
         plt.plot(ni(g3[1])[:200], label="full")
+        plt.plot(ni(g4[1])[:200], label="ortho")
         plt.title(r"$x \in {}, y \in  {}$".format(namein, nameout))
         i += 1
 
 plt.legend()
 plt.tight_layout()
-plt.show()
+# plt.show()
 
 
-net = cifarconvnet.CIFARConvNet()
-# torch.nn.init.constant_(net.fc5.weight, 1/10)
-
-net2 = copy.deepcopy(net)
-net3 = copy.deepcopy(net)
-convert_net(net2, 'net', ps=ps, mode='all', xmode='features')
-convert_net(net3, 'net', ps=4*ps, mode='all', xmode='all')
-
+net0 = cifarconvnet.CIFARConvNet()
 xt, target = iter(train_loader).next()
+g = {}
 
-y1 = net(xt)
-y2 = net2(xt)
-y3 = net3(xt)
+def get_gw(net, c, n=100):
+    return ni(getattr(net, c).weight.grad.reshape(-1)[0:n:2])
 
+for mode in [None, 'features', 'all', 'ortho']:
+    net = copy.deepcopy(net0)
+    if mode is not None:
+        convert_net(net, 'net', ps=ps, mode='all', xmode=mode)
 
-net.train()
-loss = F.nll_loss(y1, target)
-loss.backward()
+    y = net(xt)
 
-net2.train()
-loss2 = F.nll_loss(y2, target)
-loss2.backward()
-
-net3.train()
-loss3 = F.nll_loss(y3, target)
-loss3.backward()
-
-print(y1 - y2)
-print(y1 - y3)
+    net.train()
+    loss = F.nll_loss(y, target)
+    loss.backward()
+    for c in[f'conv{i}' for i in range(1, 5)]:
+        g["%s%s"%(str(mode), c)] = get_gw(net, c, n=200)
 
 
-def get_gw(net, c, n=200):
-    return ni(getattr(net, c).weight.grad.reshape(-1)[:200])
-
-plt.figure(figsize=(12, 8))
+fig = plt.figure(figsize=(12, 8))
 for i, c in enumerate([f'conv{i}' for i in range(1, 5)]):
-    plt.subplot(2,2,i+1)
-    plt.plot(get_gw(net, c, n=200), label="true")
-    plt.plot(get_gw(net2, c, n=200), label="per feature")
-    plt.plot(get_gw(net3, c, n=200), label="full")
+    plt.subplot(2, 2, i+1)
+    plt.plot(g[f'None{c}'], "-k", label="true", linewidth=4)
+    plt.plot(g[f'features{c}'], label="per feature")
+    plt.plot(g[f'all{c}'], label="full")
+    plt.plot(g[f'ortho{c}'], label="full ortho")
+    plt.xticks([])
     plt.title(c)
-plt.legend()
+
+lines, labels = fig.axes[-1].get_legend_handles_labels()
+fig.legend(lines, labels,loc='lower center', ncol=4)
+
 plt.tight_layout()
+plt.savefig(f"./figures/c4ifarfirst_{ps}.pdf", bbox_inches="tight")
 plt.show()
