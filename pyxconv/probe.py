@@ -4,7 +4,7 @@ from typing import List
 
 
 @torch.jit.script
-def rand_with_zeros(N: int, ps:int, scale: float, indices, X):
+def rand_with_zeros(N: int, ps:int, indices, X):
     """
     Random matrix (normal distribution) with mask.
 
@@ -18,7 +18,7 @@ def rand_with_zeros(N: int, ps:int, scale: float, indices, X):
     n = indices.shape[0]
     a = torch.zeros(N, ps, device=X.device)
     a[:, indices] = torch.randn(N, n, device=X.device)
-    return torch.sqrt(ps/(scale*n))*a
+    return torch.sqrt(ps/n)*a
 
 
 @torch.jit.script
@@ -50,12 +50,10 @@ def draw_o(ps:int, ci: int, N: int, X):
     if ps // ci > 8:
         n = ps // ci
         inds = torch.split(torch.randperm(ps, dtype=torch.long), n)
-        scale = 1.
     else:
         n = 8
         inds = torch.split(torch.randperm(n*ci, dtype=torch.long) % ps, n)
-        scale = n / (ps // ci)
-    e = torch.cat([rand_with_zeros(N, ps, scale, inds[i], X) for i in range(ci)], dim=0)
+    e = torch.cat([rand_with_zeros(N, ps, inds[i], X) for i in range(ci)], dim=0)
     return e
 
 
@@ -214,6 +212,6 @@ def fwd_probe_o(ps: int, b: int, ci: int, N: int, X):
 
 
 # Access dictionaries
-back_probe = {'all': back_probe_a, 'ortho': back_probe_o, 'features': back_probe_f}
-fwd_probe = {'all': fwd_probe_a, 'ortho': fwd_probe_o, 'features': fwd_probe_f}
-draw_e = {'ortho': draw_o, 'all': draw_r}
+back_probe = {'gaussian': back_probe_a, 'orthogonal': back_probe_o, 'independent': back_probe_f}
+fwd_probe = {'gaussian': fwd_probe_a, 'orthogonal': fwd_probe_o, 'independent': fwd_probe_f}
+draw_e = {'orthogonal': draw_o, 'gaussian': draw_r}

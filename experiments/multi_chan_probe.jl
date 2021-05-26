@@ -13,10 +13,10 @@ error(x, y) = norm(x - y)/(norm(x)+norm(y))
 
 function draw_e(ps::Integer, co::Integer, N::Integer)
     n = ps ÷ co
-    if n < 4
-        n = 4
+    if n < 8
+        n = 8
         inds = chunk(randperm(n*co) .% ps .+ 1, n)
-        overlap = n / (ps ÷ co)
+        overlap = 1 #n / (ps ÷ co)
     else
         inds = chunk(randperm(ps), n)
         overlap = 1
@@ -64,9 +64,10 @@ Base.:*(A::outer_LR, x) = A.L*(A.R'*x)
 Base.:*(x, A::outer_LR) = (x*A.L)*A.R'
 block(A::outer_LR, i, j) = view(A.L, (i-1)*N+1:i*N, :) * view(A.R, (j-1)*N+1:j*N, :)'
 
-a = vcat([rand(-5:5) * rand(Float32, N, b) for i=1:ci]...)
+ch_scales = rand([.001f0, .01f0, .1f0, 1f0, 100f0, 100f0, 1000f0], ci) .* rand([-1f0, 1f0], ci)
+a = vcat([ch_scales[i] * randn(Float32, N, b) for i=1:ci]...)
 
-A = outer_LR(a, max.(0f0, 100 .* randn(Float32, N*co, b)))
+A = outer_LR(a, max.(0f0, 10 .* randn(Float32, N*co, b)))
 
 
 function probe_trace(ci::Integer, co::Integer, N::Integer, A::outer_LR, e::Matrix{T}) where T

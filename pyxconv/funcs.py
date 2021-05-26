@@ -105,8 +105,8 @@ class Xconv3D(torch.autograd.Function):
             offs = offsets3d((nx, ny, nz), nw)
             delta = dilate3d(grad_output, co, (nx, ny, nz), b, ctx.stride)
             with random_seed_torch(int(seed)):
-                dw = back_probe['features'](nx*ny*nz, ci, co, b, ctx.ps,
-                                            nw**3, offs, delta, eX)
+                dw = back_probe[ctx.mode](nx*ny*nz, ci, co, b, ctx.ps,
+                                          nw**3, offs, delta, eX)
             dw = dw.reshape(co, ci, nw, nw, nw)
 
         dx = None

@@ -15,10 +15,10 @@ brelu = pyxconv.funcs.Brelu.apply
 
 
 class Xconv2D(torch.nn.modules.conv.Conv2d):
-    def __init__(self, *args, ps=8, mode='features', **kwargs):
+    def __init__(self, *args, ps=8, mode='independent', **kwargs):
         super(Xconv2D, self).__init__(*args, **kwargs)
         self.ps = ps
-        self.mode = mode
+        self.mode = mode.lower()
 
     def forward(self, input):
         if self.ps > 0:
@@ -29,10 +29,10 @@ class Xconv2D(torch.nn.modules.conv.Conv2d):
 
 
 class Xconv3D(torch.nn.modules.conv.Conv3d):
-    def __init__(self, *args, ps=8, mode='features', **kwargs):
+    def __init__(self, *args, ps=8, mode='independent', **kwargs):
         super(Xconv3D, self).__init__(*args, **kwargs)
         self.ps = ps
-        self.mode = mode
+        self.mode = mode.lower()
 
     def forward(self, input):
         if self.ps > 0:

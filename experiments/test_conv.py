@@ -9,11 +9,6 @@ import cifarconvnet
 
 import matplotlib.pyplot as plt
 
-# independent
-# r x ci x batch
-# all
-# 2r x batch i.e ci/2 cheaper
-
 torch.manual_seed(123)
 
 ci, co, b, k, ps = 3, 3, 128, 5, 2048
@@ -29,9 +24,9 @@ train_sampler = torch.utils.data.RandomSampler(dataset1, replacement=False)
 train_loader = torch.utils.data.DataLoader(dataset1, batch_size=b, sampler=train_sampler)
 
 r1 = torch.nn.Conv2d(ci, co, k, bias=False, stride=1, padding=2)
-r2 = Xconv2D(ci, co, k, ps=ps, mode='features', bias=False, stride=1, padding=2)
-r3 = Xconv2D(ci, co, k, ps=ps, mode='all', bias=False, stride=1, padding=2)
-r4 = Xconv2D(ci, co, k, ps=ps, mode='ortho', bias=False, stride=1, padding=2)
+r2 = Xconv2D(ci, co, k, ps=ps, mode='independent', bias=False, stride=1, padding=2)
+r3 = Xconv2D(ci, co, k, ps=ps, mode='Gaussian', bias=False, stride=1, padding=2)
+r4 = Xconv2D(ci, co, k, ps=ps, mode='Orthogonal', bias=False, stride=1, padding=2)
 r2.weight = copy.deepcopy(r1.weight)
 r3.weight = copy.deepcopy(r1.weight)
 r4.weight = copy.deepcopy(r1.weight)
@@ -99,7 +94,7 @@ g = {}
 def get_gw(net, c, n=100):
     return ni(getattr(net, c).weight.grad.reshape(-1)[0:n:2])
 
-for mode in [None, 'features', 'all', 'ortho']:
+for mode in [None, 'independent', 'gaussian', 'orthogonal']:
     net = copy.deepcopy(net0)
     if mode is not None:
         convert_net(net, 'net', ps=ps, mode='all', xmode=mode)
@@ -116,10 +111,10 @@ for mode in [None, 'features', 'all', 'ortho']:
 fig = plt.figure(figsize=(12, 8))
 for i, c in enumerate([f'conv{i}' for i in range(1, 5)]):
     plt.subplot(2, 2, i+1)
-    plt.plot(g[f'None{c}'], "-k", label="true", linewidth=4)
-    plt.plot(g[f'features{c}'], label="per feature")
-    plt.plot(g[f'all{c}'], label="full")
-    plt.plot(g[f'ortho{c}'], label="full ortho")
+    plt.plot(g[f'None{c}'], "--c", label="true", linewidth=2)
+    plt.plot(g[f'independent{c}'], label="Independent")
+    plt.plot(g[f'gaussian{c}'], label="Multi-channel gaussian")
+    plt.plot(g[f'orthogonal{c}'], label="Multi-channel orthogonal")
     plt.xticks([])
     plt.title(c)
 
@@ -129,3 +124,5 @@ fig.legend(lines, labels,loc='lower center', ncol=4)
 plt.tight_layout()
 plt.savefig(f"./figures/c4ifarfirst_{ps}.pdf", bbox_inches="tight")
 plt.show()
+
+from IPython import embed; embed()
