@@ -23,7 +23,7 @@ stride = (1, 1)
 nw   = 3;
 
 # Flux network
-C = Conv((nw, nw), 3*n_in=>3*n_out, identity;pad=1, stride=stride)
+C = Conv((nw, nw), n_in=>n_out, identity;pad=1, stride=stride)
 
 batches = [2^k for k=0:8]
 
@@ -43,9 +43,9 @@ fig.suptitle("Conv layer gradient chi-$(n_in), cho-$(n_out)")
 for (i, b)=enumerate(batches)
     println("Gradient for batchsize=$b")
 
-    # local X = randn(Float32, nx, ny, n_in, b)
-    # local Y = C(X) - randn(Float32, div(nx, stride[1]), div(ny, stride[2]), n_out, b)
-    local X, Y =  getbatch_CIFAR10(b, n_in, n_out; gaussian=true)
+    local X = randn(Float32, nx, ny, n_in, b)
+    local Y = C(X) - randn(Float32, div(nx, stride[1]), div(ny, stride[2]), n_out, b)
+    # local X, Y =  getbatch_CIFAR10(b, n_in, n_out; gaussian=true)
 
     cdims = DenseConvDims(X, C.weight; stride=C.stride, padding=C.pad, dilation=C.dilation)
 

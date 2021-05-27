@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 torch.manual_seed(123)
 
-ci, co, b, k, ps = 3, 3, 128, 5, 2048
+ci, co, b, k, ps = 3, 3, 128, 5, 512
 
 train_transform = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
@@ -35,8 +35,7 @@ xc = iter(train_loader).next()[0]
 xr = torch.randn(xc.shape)
 
 def ni(inp):
-    # print(torch.norm(inp, float('inf')))
-    n = 1#torch.norm(inp, float('inf'))
+    n = 1
     return (inp/n).detach().numpy().reshape(-1)
 
 i=1
@@ -108,21 +107,21 @@ for mode in [None, 'independent', 'gaussian', 'orthogonal']:
         g["%s%s"%(str(mode), c)] = get_gw(net, c, n=200)
 
 
-fig = plt.figure(figsize=(12, 8))
+fig = plt.figure(figsize=(16, 8))
 for i, c in enumerate([f'conv{i}' for i in range(1, 5)]):
     plt.subplot(2, 2, i+1)
-    plt.plot(g[f'None{c}'], "--c", label="true", linewidth=2)
-    plt.plot(g[f'independent{c}'], label="Independent")
-    plt.plot(g[f'gaussian{c}'], label="Multi-channel gaussian")
-    plt.plot(g[f'orthogonal{c}'], label="Multi-channel orthogonal")
+    plt.plot(g[f'None{c}'], "-*k", label="True", linewidth=2)
+    plt.plot(g[f'independent{c}'], label="Indep.")
+    plt.plot(g[f'gaussian{c}'], label="Multi")
+    plt.plot(g[f'orthogonal{c}'], label="Multi-Ortho")
     plt.xticks([])
     plt.title(c)
 
 lines, labels = fig.axes[-1].get_legend_handles_labels()
-fig.legend(lines, labels,loc='lower center', ncol=4)
+fig.legend(lines, labels, loc='lower center', ncol=4)
 
 plt.tight_layout()
-plt.savefig(f"./figures/c4ifarfirst_{ps}.pdf", bbox_inches="tight")
+plt.savefig(f"./figures/c4ifarfirst_{ps}.png", bbox_inches="tight")
 plt.show()
 
 from IPython import embed; embed()
