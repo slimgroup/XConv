@@ -7,7 +7,7 @@ __all__ = ['convert_net', 'update_ps', 'dilate2d', 'dilate3d', 'offsets2d', 'off
            'random_seed_torch', 'update_mode']
 
 
-def convert_net(module, name='net', ps=16, xmode='all', mode='all', maxc=32001):
+def convert_net(module, name='net', ps=16, xmode='gaussian', mode='all', maxc=32001):
     """Recursively replaces all nn.Conv2d by XConv."""
     from .modules import Xconv2D, Xconv3D, BReLU
     # iterate through immediate child modules. Note, the recursion is

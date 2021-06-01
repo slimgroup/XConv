@@ -82,8 +82,8 @@ def plot_mem(
 ):
     if exps is None:
         exps = df.exp.drop_duplicates()
-    labels = {'std': 'Standard', 'relu': 'BitReLU', 'conv': 'Probed',
-              'all': 'Probed+BitReLU'}
+    labels = {'std': 'True', 'relu': 'BitReLU', 'conv': 'Multi',
+              'all': 'Multi+BitReLU'}
     fig, ax = plt.subplots(figsize=(10, 10))
 
     layer_list = []
@@ -99,7 +99,7 @@ def plot_mem(
             df_.mem_all = mem_all / 2 ** 30
 
         layer_idx = 0
-        callidx_fwd = df_[(df_["layer_idx"] == layer_idx) and
+        callidx_fwd = df_[(df_["layer_idx"] == layer_idx) &
                           (df_["hook_type"] == "fwd")]["call_idx"].iloc[0]
         if filter_fwd:    
             df_ = df_[df_["call_idx"] <= callidx_fwd]
