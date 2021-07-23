@@ -1,7 +1,7 @@
 name = "XConv"
 uuid = "18c18004-47a8-40a1-968a-d4ba0015730b"
 authors = ["Mathias Louboutin <mathias.louboutin@gmail.com>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
