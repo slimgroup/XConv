@@ -1,6 +1,7 @@
 import torch
 
 from typing import List
+from lightonml.encoding import base
 
 
 @torch.jit.script
@@ -211,7 +212,34 @@ def fwd_probe_o(ps: int, b: int, ci: int, N: int, X):
     return torch.mm(Xv, e.reshape(ci*N, ps))
 
 
+def fwd_probe_opu(opu, ps: int, b: int, ci: int, N: int, X):
+    """
+    Forward pass of probing-based convolution filter gradient using
+    and OPU for the probing vectors.
+    Arguments:
+        ps (int): Number of probing vectors
+        X (Tensor): Layer's input Tensor
+    Returns:
+        eX (Tensor): Probed input tensor to be saved for backward pass
+    """
+    Xv = X.reshape(b, -1)
+    encoder = base.SeparatedBitPlanEncoder
+    decoder = base.SeparatedBitPlanDecoder
+
+    opu.fit1d(Xv)
+
+    return opu.linear_transform(Xv, encoder, decoder)
+
+
 # Access dictionaries
 back_probe = {'gaussian': back_probe_a, 'orthogonal': back_probe_o, 'independent': back_probe_f}
-fwd_probe = {'gaussian': fwd_probe_a, 'orthogonal': fwd_probe_o, 'independent': fwd_probe_f}
+
+
+def fwd_probe(mode, opu):
+    if opu is not None:
+        assert mode == 'gaussian'
+        return lambda *a: fwd_probe_opu(opu, *a)
+    else:
+        return {'gaussian': fwd_probe_a, 'orthogonal': fwd_probe_o, 'independent': fwd_probe_f}[mode]
+
 draw_e = {'orthogonal': draw_o, 'gaussian': draw_r}

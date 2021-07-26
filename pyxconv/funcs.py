@@ -9,12 +9,12 @@ class Xconv2D(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input, weight, ps=8, mode='all', bias=None, stride=1, padding=0,
-                dilation=1, groups=1):
+                dilation=1, groups=1, opu=None):
         seed = torch.randint(100000, (1,))
         b, ci, nx, ny = input.shape
         with random_seed_torch(int(seed)):
             with torch.autograd.grad_mode.no_grad():
-                eX = fwd_probe[mode](ps, b, ci, nx*ny, input)
+                eX = fwd_probe(mode, opu)(ps, b, ci, nx*ny, input)
 
         ctx.xshape = input.shape
         ctx.stride = stride
