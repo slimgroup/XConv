@@ -124,7 +124,7 @@ def back_probe_a(N: int, ci: int, co: int, b: int, ps: int, nw: int,
 
     for i, o in enumerate(offs):
         ev = e if N==1 else e.roll(-int(o), dims=1)
-        grad_weight[:, :, i] = torch.einsum('bjk, lkb -> jl', LRe, ev)
+        grad_weight[:, :, i] = torch.einsum('pon, inp -> oi', LRe, ev)
     return grad_weight / ps
 
 
@@ -223,16 +223,61 @@ def fwd_probe_opu(opu, ps: int, b: int, ci: int, N: int, X):
         eX (Tensor): Probed input tensor to be saved for backward pass
     """
     Xv = X.reshape(b, -1)
+    return opu_mat_mul(opu, Xv)
+
+def opu_mat_mul(opu, mat):
     encoder = base.SeparatedBitPlanEncoder
     decoder = base.SeparatedBitPlanDecoder
 
-    opu.fit1d(Xv)
+    opu.fit1d(mat)
+    return torch.tensor(opu.linear_transform(mat, encoder, decoder), dtype=mat.dtype, device=mat.device)
 
-    return opu.linear_transform(Xv, encoder, decoder)
 
+def back_probe_opu(opu, N: int, ci: int, co: int, b: int, ps: int, nw: int,
+                   offs: List[int], grad_output, eX):
+    """
+    Backward pass of probing-based convolution filter gradient.
+    Arguments:
+        seed (int): Random seed for probing vectors
+        N (int): Number of pixels
+        ci (int): Number of input channels
+        co (int): Number of output channels
+        b (int): Batch size
+        ps (int): Number of probing vectors
+        nw (int): Convolution filter width (nw in each direction)
+        offs (List): List of offsets for the convolution filter coefficients
+        grad_output (Tensor): Backward input
+        eX (Tensor): Forward pass probed Tensor (b x ps)
+    Returns:
+        gradient w.r.t convolution filter
+    """
+    # Init gradient
+    grad_weight = torch.zeros(co, ci, nw, device=eX.device)
+    mask = torch.zeros(1, co, 1, device=eX.device)
+    # Y' X e
+    Ye = grad_output.view(b, -1)
+    LRe = torch.mm(eX.t(), Ye).view(ps, co, N)
+
+    for i, o in enumerate(offs):
+        LReloc = LRe.roll(-int(o), dims=2)
+        for coi in range(co):
+            mask[0, coi, 0] = 1
+            eLRe = opu_mat_mul(opu, (mask*LReloc).reshape(ps, co*N))
+            mask[0, coi, 0] = 0
+            print(eLRe.shape, ps, co, ci, N, b)
+            # grad_weight[coi, :, i] =
+
+    return grad_weight / ps
 
 # Access dictionaries
 back_probe = {'gaussian': back_probe_a, 'orthogonal': back_probe_o, 'independent': back_probe_f}
+
+def back_probe(mode, opu):
+    if opu is not None:
+        assert mode == 'gaussian'
+        return lambda *a: back_probe_opu(opu, *a)
+    else:
+        return {'gaussian': back_probe_a, 'orthogonal': back_probe_o, 'independent': back_probe_f}[mode]
 
 
 def fwd_probe(mode, opu):

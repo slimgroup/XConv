@@ -23,6 +23,7 @@ class Xconv2D(torch.autograd.Function):
         ctx.padding = padding
         ctx.mode = mode
         ctx.ps = ps
+        ctx.opu = opu
 
         with torch.autograd.grad_mode.no_grad():
             Y = F.conv2d(input, weight, bias=bias, stride=stride,
@@ -47,7 +48,7 @@ class Xconv2D(torch.autograd.Function):
             delta = dilate2d(grad_output, co, (nx, ny), b, ctx.stride)
             with random_seed_torch(int(seed)):
                 with torch.autograd.grad_mode.no_grad():
-                    dw = back_probe[ctx.mode](nx*ny, ci, co, b, ctx.ps,
+                    dw = back_probe(ctx.mode, ctx.opu)(nx*ny, ci, co, b, ctx.ps,
                                               nw**2, offs, delta, eX)
                 dw = dw.reshape(co, ci, nw, nw)
 
