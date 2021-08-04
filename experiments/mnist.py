@@ -7,13 +7,13 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
-from xconv import Xconv2D
+from pyxconv import Xconv2D
 
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = Xconv2D(1, 32, 3, 32, 1, padding=1)
-        self.conv2 = Xconv2D(32, 64, 3, 32, 1, padding=1)
+        self.conv1 = Xconv2D(1, 32, 3, ps=32, stride=1, padding=1)
+        self.conv2 = Xconv2D(32, 64, 3, ps=32, stride=1, padding=1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
         self.fc1 = nn.Linear(12544, 128)
@@ -43,6 +43,7 @@ def train(args, model, device, train_loader, optimizer, epoch):
         output = model(data)
         loss = F.nll_loss(output, target)
         loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2)
         optimizer.step()
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
