@@ -9,7 +9,7 @@ __all__ = ['convert_net', 'update_ps', 'dilate2d', 'dilate3d', 'offsets2d', 'off
 
 def convert_net(module, name='net', ps=16, xmode='gaussian', mode='all', maxc=32001):
     """Recursively replaces all nn.Conv2d by XConv."""
-    from .modules import Xconv2D, Xconv3D, BReLU
+    from .modules import Xconv2D, Xconv3D, BLRReLU
     # iterate through immediate child modules. Note, the recursion is
     # done by our code no need to use named_modules()
     for child_name, child in module.named_children():
@@ -32,7 +32,7 @@ def convert_net(module, name='net', ps=16, xmode='gaussian', mode='all', maxc=32
                 newconv.bias = child.bias
                 setattr(module, child_name, newconv)
         elif isinstance(child, torch.nn.ReLU) and mode in ['all', 'relu']:
-            setattr(module, child_name, BReLU(inplace=child.inplace))
+            setattr(module, child_name, BLRReLU(r=ps, inplace=child.inplace))
         else:
             convert_net(child, child_name, ps=ps, xmode=xmode, mode=mode, maxc=maxc)
 

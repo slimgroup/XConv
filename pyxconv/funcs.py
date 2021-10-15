@@ -139,3 +139,33 @@ class Brelu(torch.autograd.Function):
         if ctx.needs_input_grad[0]:
             return grad_output*binp, None
         return None, None
+
+
+
+class BLRrelu(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, input, r, inplace=False):
+        seed = torch.randint(100000, (1,))
+        b, ci, nx, ny, nz = input.shape
+        with random_seed_torch(int(seed)):
+            with torch.autograd.grad_mode.no_grad():
+                px, eX = lr_prod_o(r, b, ci, nx*ny*nz, input)
+
+                Y = F.relu(px, inplace=inplace)
+                sx = (eX > 0).byte()
+        ctx.save_for_backward(sx)
+        ctx.shape = input.shape[1], torch.prod(torch.tensor(input.shape[2:]))
+        ctx.ps = r
+
+        return Y
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        sx, = ctx.saved_tensors
+        r = ctx.ps
+        ci, N = ctx.shape
+        e = draw_o(r, ci, N, grad_output)
+        if ctx.needs_input_grad[0]:
+            return torch.mm(e.T, sx), None, None
+        return None, None, None

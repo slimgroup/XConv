@@ -211,6 +211,23 @@ def fwd_probe_o(ps: int, b: int, ci: int, N: int, X):
     return torch.mm(Xv, e.reshape(ci*N, ps))
 
 
+@torch.jit.script
+def lr_prod_o(ps: int, b: int, ci: int, N: int, X):
+    """
+    Forward pass of probing-based convolution filter gradient.
+    Arguments:
+        ps (int): Number of probing vectors
+        X (Tensor): Layer's input Tensor
+    Returns:
+        eX (Tensor): Probed input tensor to be saved for backward pass
+    """
+    Xv = X.reshape(b, -1)
+    e = draw_o(ps, ci, N, X)
+    eX = torch.mm(Xv, e.reshape(ci*N, ps))
+    px = torch.mm(e.reshape(ci*N, ps), eX).reshape(X.shape)
+    return px, eX
+
+
 # Access dictionaries
 back_probe = {'gaussian': back_probe_a, 'orthogonal': back_probe_o, 'independent': back_probe_f}
 fwd_probe = {'gaussian': fwd_probe_a, 'orthogonal': fwd_probe_o, 'independent': fwd_probe_f}

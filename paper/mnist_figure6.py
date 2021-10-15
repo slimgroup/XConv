@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torch.utils.tensorboard import SummaryWriter
 
-import sls
+# import sls
 import networks
 
 from pyxconv import convert_net
@@ -99,7 +99,8 @@ def mnist_train(b: int, ps: int, args, cudaid: int)-> None:
     print(f"({b}, {ps}): split test and train")
     model = Net(ps).to(device)
     
-    optimizer = sls.SlsEg(model.parameters(), init_step_size=1, n_batches_per_epoch=len(train_loader))
+    # optimizer = sls.SlsEg(model.parameters(), init_step_size=1, n_batches_per_epoch=len(train_loader))
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=3e-5)
     print(f"({b}, {ps}): start training")
     
     tracker = {'n_fwd': 0, 'n_bck': 0, 'niter': 0}
