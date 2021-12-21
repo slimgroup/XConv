@@ -37,10 +37,10 @@ function Δconv_std(x, w, cdim; kw...)
     function back(Δ)
         Δ = colmajor(Δ)
         return (
-            NO_FIELDS,
+            NoTangent(),
             @thunk(∇conv_data(Δ, w, cdim, kw...)),
             @thunk(∇conv_filter(x, Δ, cdim, kw...)),
-            DoesNotExist(),
+            NoTangent(),
         )
     end
     return back
@@ -51,10 +51,10 @@ function Δconv_ev(X, w, cdim; kw...)
     function back(Δ)
         Δ = colmajor(Δ)
         return (
-            NO_FIELDS,
+            NoTangent(),
             @thunk(∇conv_data(Δ, w, cdim, kw...)),
             @thunk(grad_ev(seed, eX, Δ, w, NNlib.stride(cdim))),
-            DoesNotExist(),
+            NoTangent(),
         )
     end
     return back

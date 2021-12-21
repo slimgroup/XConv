@@ -31,7 +31,7 @@ r2.weight = copy.deepcopy(r1.weight)
 r3.weight = copy.deepcopy(r1.weight)
 r4.weight = copy.deepcopy(r1.weight)
 
-xc = iter(train_loader).next()[0]
+xc = next(iter(train_loader))[0]
 xr = torch.randn(xc.shape)
 
 def ni(inp):
@@ -53,7 +53,7 @@ for (inp, namein) in zip([xc, xr], ['C10', '\mathcal{N}(0, 1)']):
             y4 = r4(inp)
             g4 = y4.grad_fn.apply(y4)
         elif nameout == 'C10':
-            y = iter(train_loader).next()[0]
+            y = next(iter(train_loader))[0]
             y1 = r1(inp)
             g1 = y1.grad_fn(y)
             y2 = r2(inp)
@@ -87,7 +87,7 @@ plt.tight_layout()
 
 
 net0 = cifarconvnet.CIFARConvNet()
-xt, target = iter(train_loader).next()
+xt, target = next(iter(train_loader))
 g = {}
 
 def get_gw(net, c, n=100):

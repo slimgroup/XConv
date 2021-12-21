@@ -19,7 +19,7 @@ if __name__ == "__main__":
     bs = [2**i for i in range(5, 9)]
     cis = [2**i for i in range(0, 10, 3)]
 
-    device = torch.device("cuda")
+    device = torch.device("mps")
     results = []
 
     for ps in pss:
