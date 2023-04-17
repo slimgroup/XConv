@@ -35,6 +35,9 @@ pip install -e .
 
 This installation will install the default `torch`, we recommend to install the version that is best suited for your system following [Torch Installation](https://pytorch.org/get-started/locally/).
 
+# Acknowledgment
+
+This software was developped and tested on GPUs thanks to NVIDIA Academic Hardware Grant. 
 
 # Authors
 
