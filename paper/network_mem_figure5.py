@@ -19,8 +19,8 @@ print(
     f"benchmarking memeory usage of standard networks with r={args.ps} probing vectors"
 )
 
-bs = 4
-input = torch.rand(bs, 3, 224, 224).cuda()
+bs = 32
+input = torch.rand(bs, 3, 512, 512).cuda()
 
 
 def bench_mem(name, ps, mode, mem_log):
@@ -35,10 +35,11 @@ def bench_mem(name, ps, mode, mem_log):
     torch.cuda.empty_cache()
 
 
-for net in ["squeezenet1_0", "squeezenet1_1", "resnet18", "resnet50"]:
+for net in ["squeezenet1_0"]:
     mem_log = []
     for mode in ["std", "all"]:
         bench_mem(net, args.ps, mode, mem_log)
+        import time; time.sleep(10)
 
     df = pd.DataFrame(mem_log)
 

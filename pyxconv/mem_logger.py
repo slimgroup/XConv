@@ -59,9 +59,10 @@ def log_mem(model, inp, mem_log=None, exp=None):
         _add_memory_hooks(idx, module, mem_log, exp, hr)
 
     try:
-        out = model(inp)
-        loss = out.sum()
-        loss.backward()
+        for j in range(10):
+            out = model(inp)
+            loss = out.sum()
+            loss.backward()
     except Exception as e:
         print(f"Errored with error {e}")
     finally:
