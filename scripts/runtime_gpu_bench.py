@@ -1,5 +1,7 @@
+import torch.nn as nn
 import matplotlib.pyplot as plt
-
+import pickle
+import torch.utils.benchmark as benchmark
 from pyxconv import *
 
 
@@ -9,10 +11,12 @@ def do_conv(c, X):
 
 if __name__ == "__main__":
     num_threads = torch.get_num_threads()
-    pss = [0, 2, 4, 8, 16, 32, 64]
+    # pss = [0, 2, 4, 8, 16, 32, 64]
+    pss = [0, 32, 128, 256]
     Ns = [2**i for i in range(5, 11)]
     bs = [2**i for i in range(5, 9)]
-    cis = [2**i for i in range(0, 10, 3)]
+    # cis = [2**i for i in range(0, 10, 3)]
+    cis = [3, 64, 128, 256]
 
     device = torch.device("cuda")
     results = []

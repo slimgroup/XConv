@@ -19,7 +19,7 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
            'dog', 'frog', 'horse', 'ship', 'truck')
 
 
-def Net(ps=0, xmode='indepentent'):
+def Net(ps=0, xmode='independent'):
     net = networks.CIFARConvNet()
     if ps == 0:
         return net
@@ -148,6 +148,6 @@ if __name__ == '__main__':
     
     cifar_train(128, 0, None, args, 0)
     args.lr *= 1.5
-    cifar_train(256, 32, 'indepentent', args, 0)
+    cifar_train(256, 32, 'independent', args, 0)
     cifar_train(256, 256, 'gaussian', args, 0)
     cifar_train(256, 256, 'orthogonal', args, 0)

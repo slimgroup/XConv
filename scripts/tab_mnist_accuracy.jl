@@ -14,7 +14,7 @@ if CUDA.has_cuda()
     iterator = CuIterator
     @info "Training on GPU"
 else
-    iterator = ()
+    iterator = identity
     device = cpu
     @info "Training on CPU"
 end
@@ -115,6 +115,7 @@ ps_sizes = [0..., [2^i for i=1:7]...]
 
 for b in b_sizes
     for ps in ps_sizes
+d = "MNIST"
         η = 3e-3
         train(;η=η, epochs=10+2*log2(b),batchsize=b, probe_size=ps, name=d, mode= ps>0 ? "EVGrad" : "TrueGrad")
     end
@@ -123,7 +124,6 @@ end
 
 nps, nb = length(ps_sizes)+1, length(b_sizes)
 accs = Dict("MNIST" => zeros(nps, nb))
-d = "MNIST"
 
 for (i,b) in enumerate(b_sizes)
     @show b, d

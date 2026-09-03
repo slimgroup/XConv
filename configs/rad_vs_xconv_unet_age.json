@@ -1,0 +1,16 @@
+{
+    "experiment_name": "rad_vs_xconv_unet_age",
+    "img_dims": "128,256,512",
+    "r_list": "16,64,256",
+    "keep_fracs": "0.1",
+    "mem_budget_gb": 16.0,
+    "subset_size": 4096,
+    "n_runs": 3,
+    "base_channels": 32,
+    "depth": 4,
+    "precision": "fp32",
+    "seed": 0,
+    "gpu_id": 0,
+    "phase": "train",
+    "upload": 1
+}

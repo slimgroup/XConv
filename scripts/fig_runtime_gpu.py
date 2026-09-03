@@ -8,7 +8,7 @@ matplotlib.rcParams['font.size'] = 18
 try:
     results = pickle.load(open("pybench.pickle", "rb"))
 except:
-    FileNotFoundError("Result file not found, run gpu_bench.py first")
+    raise FileNotFoundError("Result file not found, run runtime_runtime_gpu_bench.py first")
 
 bi = [32, 64, 128, 256]
 ci = [3, 64, 128, 256]
@@ -38,15 +38,28 @@ for r in results:
 
 col_p = ["--^m", "--^b", "--^c", "--^y", "--^g", "--^k"]
 
+
 for b in bi:
     fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(15, 15), constrained_layout=True)
     fig.suptitle("  ") 
     for c, ax in zip(ci, axs.reshape(-1)):
-        ax.loglog(*as_plot(t_times[b][c]), color='red', linestyle='--',
-                  marker='o', label="True", basex=2, basey=10)
+        ax.loglog(
+            *as_plot(t_times[b][c]), 
+            color='red', 
+            linestyle='--',
+            marker='o', 
+            label="True", 
+            base=2 
+        )
+        ax.set_yscale('log', base=10)
         for j,p in enumerate(ps):
-            ax.loglog(*as_plot(p_times[p][b][c]), col_p[j], label=f"r={p}",
-                      basex=2, basey=10)
+            ax.loglog(
+                *as_plot(p_times[p][b][c]), 
+                col_p[j], 
+                label=f"r={p}",
+                base=2
+            )
+            ax.set_yscale('log', base=10)
         ax.set_xlabel('N (image is NxN)')
         ax.set_ylabel('Runtime (s)')
         ax.set_title(r"$C_{in}=C_{out}=$"+f"{c}")

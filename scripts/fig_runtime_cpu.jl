@@ -1,4 +1,4 @@
-using NNlib, XConv, LinearAlgebra, BenchmarkTools, PyPlot
+using NNlib, XConv, LinearAlgebra, BenchmarkTools, PyPlot, Statistics, JLD
 initXConv(0, "TrueGrad")
 BenchmarkTools.DEFAULT_PARAMETERS.samples=10
 
@@ -42,7 +42,7 @@ if !isfile("bench_cpu.jld")
             end
         end
     end
-    @save "bench_cpu.jld" t_ev t_nnlib hannels batchsizes sizes ps
+    @save "bench_cpu.jld" t_ev t_nnlib channels batchsizes sizes ps
 
 else
     @load "bench_cpu.jld" t_ev t_nnlib channels batchsizes sizes ps
@@ -62,10 +62,11 @@ for (i,c)=enumerate(channels)
         xticks(fontsize=18)
         yticks(fontsize=18)
         for (l,p)=enumerate(ps)
-            loglog(sizes[1:li], t_ev[1:li, k, i, l], label="r=$p", colrs[l], markersize=3, linewidth=1,basex=2, basey=10)
+            loglog(sizes[1:li], t_ev[1:li, k, i, l], label="r=$p", colrs[l], markersize=3, linewidth=1)
         end
-        loglog(sizes[1:li], t_nnlib[1:li, k, i], "--ob", label="True", markersize=3, linewidth=1,basex=2, basey=10)
-        legend(loc="upper left", fontize=18)
+        loglog(sizes[1:li], t_nnlib[1:li, k, i], "--ob", label="True", markersize=3, linewidth=1)
+        xscale("log", base=2); yscale("log", base=10)
+    legend(loc="upper left", fontsize=18)
         tight_layout()
         savefig("./bench_cpu_$(c)_$(b).png", bbox_inches="tight")
     end

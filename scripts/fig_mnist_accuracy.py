@@ -55,7 +55,7 @@ def tflog2pandas(path: str) -> pd.DataFrame:
 all_log = defaultdict(dict)
 b_sizes = set()
 ps_n = set()
-for root, dirs, files in os.walk("./mnist_bench/", topdown=False):
+for root, dirs, files in os.walk("./mnist_bench_sls/", topdown=False):
     try:
         print(f"Reading {files[0]}")
         b, ps = tuple(int(i) for i in root.split('/')[-1].split('_'))
