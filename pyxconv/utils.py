@@ -18,7 +18,8 @@ def convert_net(module, name='net', ps=16, xmode='gaussian', mode='all', maxc=32
                 b = child.bias is not None
                 newconv = Xconv2D(child.in_channels, child.out_channels,
                                   child.kernel_size, ps=ps, mode=xmode,
-                                  stride=child.stride, padding=child.padding, bias=b)
+                                  stride=child.stride, padding=child.padding, bias=b,
+                                  padding_mode=child.padding_mode)
                 newconv.weight = child.weight
                 newconv.bias = child.bias
                 setattr(module, child_name, newconv)
@@ -27,7 +28,8 @@ def convert_net(module, name='net', ps=16, xmode='gaussian', mode='all', maxc=32
                 b = child.bias is not None
                 newconv = Xconv3D(child.in_channels, child.out_channels,
                                   child.kernel_size, ps=ps, stride=child.stride,
-                                  padding=child.padding, bias=b, mode=xmode)
+                                  padding=child.padding, bias=b, mode=xmode,
+                                  padding_mode=child.padding_mode)
                 newconv.weight = child.weight
                 newconv.bias = child.bias
                 setattr(module, child_name, newconv)
