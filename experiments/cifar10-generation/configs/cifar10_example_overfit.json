@@ -1,0 +1,22 @@
+{
+    "experiment_name": "cifar10_overfit",
+    "batchsize": 512,
+    "max_epochs": 1000,
+    "save_freq": 200,
+    "mem_metric_freq": 200,
+    "lr": 0.0002,
+    "warmup_steps": 1000,
+    "nt": 1000,
+    "beta_schedule": "linear",
+    "attn_dim": 0,
+    "block_nlayers": 2,
+    "block_channels": "128,256,512,512",
+    "time_emb": "positional",
+    "gpu_id": 0,
+    "seed": 0,
+    "phase": "train",
+    "tk_reg": 0.0,
+    "holdout": 0.0,
+    "testing_epoch": -1
+}
+

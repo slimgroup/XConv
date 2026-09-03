@@ -1,0 +1,13 @@
+{
+    "subset_size": 512,
+    "num_ch": 1,
+    "model_name": "genparihaka_unet",
+    "probing_vector": "8",
+    "batch_size": 38, 
+    "seed": 1,
+    "grad_dict_dir": "genparihaka_unet_xconv_avg_grad_err_results/probing_vector_8/img_128_subset_512_batch_size_38_probing_vector_8_run_num_1/",
+    "full_grads_path": "genparihaka_unet_xconv_avg_grad_err_results/probing_vector_base/img_128_subset_512_batch_size_26_probing_vector_base_run_num_1/full_grad_param_dict.pkl",
+    "t_folder": "test_img_z_t_dataset/128/t_values",
+    "z_folder": "test_img_z_t_dataset/128/z_values",
+    "img_folder": "test_img_z_t_dataset/128/img_values"
+}

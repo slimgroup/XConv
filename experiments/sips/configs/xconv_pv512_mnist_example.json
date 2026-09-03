@@ -1,0 +1,21 @@
+{
+    "experiment_name": "mnist",
+    "batchsize": 768,
+    "max_epochs": 200,
+    "save_freq": 50,
+    "lr": 0.001,
+    "warmup_steps": 500,
+    "nt": 1000,
+    "beta_schedule": "linear",
+    "attn_dim": 8,
+    "block_nlayers": 2,
+    "block_channels": "64,128,192",
+    "time_emb": "positional",
+    "gpu_id": 0,
+    "seed": 0,
+    "phase": "train",
+    "testing_epoch": -1,
+    "xconv_varn": "xconv",
+    "probing_vector": "512",
+    "run_num": 1
+}

@@ -1,0 +1,22 @@
+cifar10_unet_xconv:
+  model_name: "cifar10_unet"
+  xconv_varn: "xconv"
+  img_dims: [32]
+  model_plot_name: "CIFAR-10 [XConv]"
+  probing_vector_img_dims_batch_sizes_dict:
+    "base": 
+        32: 300
+    "2":
+        32: 411
+    "4":
+        32: 410
+    "8":
+        32: 407
+    "16":
+        32: 401
+    "32":
+        32: 389
+    "64":
+        32: 365
+    "128":
+        32: 328

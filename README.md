@@ -69,6 +69,8 @@ end in many small feature maps.
 
 ## Reproducing the paper
 
+[FIGURES.md](FIGURES.md) maps every figure and table in the paper to the script that produces it.
+
 `scripts/` holds the method figures and the measurements behind them; `experiments/` holds one
 directory per downstream task. A `fig_` or `tab_` prefix means the script renders a result;
 anything else produces what one of them reads.

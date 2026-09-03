@@ -1,0 +1,11 @@
+{
+    "subset_size": 512,
+    "seed": 1,
+    "num_ch": 1,
+    "batch_size": 27,
+    "model_name": "genparihaka_unet",
+    "base_grad_dict_dir": "genparihaka_unet_xconv_avg_grad_err_results/probing_vector_base/img_128_subset_512_batch_size_27_probing_vector_base_run_num_1/",
+    "t_folder": "test_img_z_t_dataset/128/t_values",
+    "z_folder": "test_img_z_t_dataset/128/z_values",
+    "img_folder": "test_img_z_t_dataset/128/img_values"
+}

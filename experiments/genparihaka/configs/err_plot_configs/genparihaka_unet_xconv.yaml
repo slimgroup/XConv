@@ -1,0 +1,30 @@
+genparihaka_unet_xconv:
+  model_name: "genparihaka_unet"
+  xconv_varn: "xconv"
+  img_dims: [128]
+  model_plot_name: "genparihaka [XConv]"
+  probing_vector_img_dims_batch_sizes_dict:
+    "base": 
+        128: 27
+    "2":
+        128: 38
+    "4":
+        128: 38
+    "8":
+        128: 38
+    "16":
+        128: 38
+    "32":
+        128: 38
+    "64":
+        128: 38
+    "128":
+        128: 37
+    "256":
+        128: 37
+    "512":
+        128: 35
+    "1024":
+        128: 32
+    "2048":
+        128: 28
