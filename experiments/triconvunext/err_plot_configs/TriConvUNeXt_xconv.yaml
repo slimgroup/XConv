@@ -1,0 +1,30 @@
+TriConvUNeXt_xconv:
+  model_name: "TriConvUNeXt"
+  xconv_varn: "xconv"
+  img_dims: [256]
+  model_plot_name: "TriConvUNeXt [XConv]"
+  probing_vector_img_dims_batch_sizes_dict:
+    "base": 
+        256: 31
+    "2":
+        256: 34
+    "4": 
+        256: 34
+    "8":
+        256: 34
+    "16":
+        256: 34
+    "32":
+        256: 34
+    "64":
+        256: 34
+    "128":
+        256: 34
+    "256":
+        256: 34
+    "512":
+        256: 33
+    "1024":
+        256: 33
+    "2048":
+        256: 32

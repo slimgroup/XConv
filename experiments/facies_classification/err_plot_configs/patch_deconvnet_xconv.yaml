@@ -1,0 +1,28 @@
+patch_deconvnet_xconv:
+  model_name: "patch_deconvnet"
+  xconv_varn: "xconv"
+  spatial_prefix: "patch_"
+  img_dims: [99]
+  patch_size: 99
+  stride: 50
+  pretrained: false
+  model_plot_name: "Facies patch-deconvnet [XConv]"
+  show_conv_conversion_pct: true
+  # Batch sizes must match bash_compute_full_gradients / bash_compute_mini_batch_gradients.
+  probing_vector_img_dims_batch_sizes_dict:
+    "base":
+      99: 285
+    "2":
+      99: 295
+    "4":
+      99: 295
+    "8":
+      99: 295
+    "16":
+      99: 294
+    "32":
+      99: 293
+    "64":
+      99: 292
+    "128":
+      99: 288
