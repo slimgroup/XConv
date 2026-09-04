@@ -1,0 +1,15 @@
+# Downloaded inputs and produced artifacts: everything here is fetched or regenerated.
+data/
+results/
+figures/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Julia
+Manifest.toml

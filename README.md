@@ -1,31 +1,48 @@
 [![DOI](https://zenodo.org/badge/346371507.svg)](https://zenodo.org/badge/latestdoi/346371507)
 
-# Memory efficient convolution layer via matrix sketching
+# XConv
 
-This software provides the implementation of convolution layers where the gradient with respect to the weights
-is approximated by an unbiased estimate. This estimate is obtained via matrix probing. This package contains two implementation:
+Code for
 
-- A `julia` implementation that overloads [NNlib](https://github.com/FluxML/NNlib.jl) for the computation of ``∇conv_filter``.
-- A [PyTorch](https://pytorch.org/) implementation that defines a new convolution layer ``Xconv2D, Xconv3D``.
+> **XConv: Low-memory stochastic backpropagation for convolutional layers.**
+> Anirudh Thatipelli, Jeffrey J. Sam, Mathias Louboutin, Ali Siahkoohi, Rongrong Wang and
+> Felix J. Herrmann. Transactions on Machine Learning Research, 2026.
+> https://openreview.net/forum?id=ajv7wvEvnh
 
+## Overview
 
-## Julia installation
+Training a convolutional network holds every intermediate activation until the backward pass
+needs it, and on high-resolution or volumetric data that is what exhausts the device long before
+the arithmetic does. XConv keeps a compressed projection of each activation instead of the
+activation itself, and recovers the filter gradient from it by multi-channel randomized trace
+estimation. The number of probing vectors sets the trade: more of them cost memory and buy
+gradient accuracy.
 
-To install the julia package, you can install it via the standard `dev` command
+It is a near drop-in replacement. Backpropagation stays standard, the architecture is unchanged,
+and an existing network is converted in one call.
+
+| | |
+|---|---|
+| Julia | overloads [NNlib](https://github.com/FluxML/NNlib.jl)'s `∇conv_filter`, so an existing model needs no edit |
+| PyTorch | `Xconv2D` and `Xconv3D` layers, and `convert_net` to swap them into a model in place |
+
+Both support 2D and 3D convolutions.
+
+## Installation
+
+Julia:
 
 ```julia
->> ]dev https://github.com/slimgroup/XConv
+]dev https://github.com/slimgroup/XConv
 ```
 
-## Pip installation
-
-The python source of this package can also be directly install via pip:
-
+PyTorch:
 
 ```bash
 pip install git+https://github.com/slimgroup/XConv
 ```
-or if you wish to get access to the experiments and benchmarking script:
+
+To also get the experiments that reproduce the paper:
 
 ```bash
 git clone https://github.com/slimgroup/XConv
@@ -33,19 +50,52 @@ cd XConv
 pip install -e .
 ```
 
-This installation will install the default `torch`, we recommend to install the version that is best suited for your system following [Torch Installation](https://pytorch.org/get-started/locally/).
+This pulls the default `torch`. For a build matched to your system, follow
+[the PyTorch installation guide](https://pytorch.org/get-started/locally/). Reading device memory
+through NVML, which the peak-memory measurements report, needs the optional extra:
+`pip install -e ".[memory]"`.
 
-# Acknowledgment
+## Using it
 
-This software was developped and tested on GPUs thanks to NVIDIA Academic Hardware Grant. 
+```python
+from pyxconv import convert_net
 
-# Authors
+convert_net(model, ps=16)   # every convolution now stores a rank-16 projection
+```
 
-This package is developpend at Georgia Institute of Technology byt the ML4Seismic Lab. The main autors of this package are:
+`ps` is the number of probing vectors. `adaptive_convert_net` converts only those layers whose
+activation is large enough to be worth compressing, which is the better choice for networks that
+end in many small feature maps.
 
-- Mathias Louboutin: mlouboutin3@gatech.edu
-- Ali Siahkoohi
+## Reproducing the paper
 
-# License
+`scripts/` holds the method figures and the measurements behind them; `experiments/` holds one
+directory per downstream task. A `fig_` or `tab_` prefix means the script renders a result;
+anything else produces what one of them reads.
 
-This package is distributed under the MIT license. Please check the LICENSE file for usage.
+## Tests
+
+```bash
+pytest tests/
+```
+
+CPU-only and fast. They assert properties rather than outputs: the filter-gradient estimate is
+averaged over many probe draws and compared against the exact gradient, in 2D and 3D, for each
+probing distribution and each boundary.
+
+## Authors
+
+Developed at the Georgia Institute of Technology by the ML4Seismic Lab.
+
+- Mathias Louboutin — <mlouboutin3@gatech.edu>
+- Ali Siahkoohi — <alisk@ucf.edu>
+- Anirudh Thatipelli — <anirudh.thatipelli@ucf.edu>
+- Jeffrey J. Sam — <jeffrey.jj.sam@gmail.com>
+
+## Acknowledgment
+
+This software was developed and tested on GPUs thanks to an NVIDIA Academic Hardware Grant.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
