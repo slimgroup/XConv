@@ -23,7 +23,8 @@ class Xconv2D(torch.nn.modules.conv.Conv2d):
     def forward(self, input):
         if self.ps > 0:
             return conv2d(input, self.weight, self.ps, self.mode, self.bias, self.stride,
-                          self.padding, self.dilation, self.groups)
+                          self.padding, self.dilation, self.groups,
+                          self.padding_mode)
         return F.conv2d(input, self.weight, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
@@ -37,7 +38,8 @@ class Xconv3D(torch.nn.modules.conv.Conv3d):
     def forward(self, input):
         if self.ps > 0:
             return conv3d(input, self.weight, self.ps, self.mode, self.bias, self.stride,
-                          self.padding, self.dilation, self.groups)
+                          self.padding, self.dilation, self.groups,
+                          self.padding_mode)
         return F.conv3d(input, self.weight, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 

@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
 
+from torch.nn.modules.utils import _pair, _triple
+
 from pyxconv.utils import *
 from pyxconv.probe import *
 
@@ -9,7 +11,14 @@ class Xconv2D(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input, weight, ps=8, mode='all', bias=None, stride=1, padding=0,
-                dilation=1, groups=1):
+                dilation=1, groups=1, padding_mode='zeros'):
+        if padding_mode not in ('zeros', 'circular'):
+            raise NotImplementedError(
+                "XConv supports padding_mode 'zeros' or 'circular', got "
+                f"{padding_mode!r}. The probed filter gradient shifts the "
+                "probing vectors, so it can only represent a zero or a "
+                "circular boundary.")
+
         seed = torch.randint(100000, (1,))
         b, ci, nx, ny = input.shape
         with random_seed_torch(int(seed)):
@@ -23,10 +32,19 @@ class Xconv2D(torch.autograd.Function):
         ctx.padding = padding
         ctx.mode = mode
         ctx.ps = ps
+        ctx.padding_mode = padding_mode
 
         with torch.autograd.grad_mode.no_grad():
-            Y = F.conv2d(input, weight, bias=bias, stride=stride,
-                         padding=padding, groups=groups)
+            # The forward must use the boundary that the backward probe
+            # shift assumes, otherwise the filter gradient is biased.
+            if padding_mode == 'circular':
+                ph, pw = _pair(padding)
+                Y = F.conv2d(F.pad(input, (pw, pw, ph, ph), mode='circular'),
+                             weight, bias=bias, stride=stride, padding=0,
+                             groups=groups)
+            else:
+                Y = F.conv2d(input, weight, bias=bias, stride=stride,
+                             padding=padding, groups=groups)
 
         ctx.save_for_backward(eX, seed, weight, bias)
 
@@ -48,11 +66,21 @@ class Xconv2D(torch.autograd.Function):
             with random_seed_torch(int(seed)):
                 with torch.autograd.grad_mode.no_grad():
                     dw = back_probe[ctx.mode](nx*ny, ci, co, b, ctx.ps,
-                                              nw**2, offs, delta, eX)
+                                              nw**2, offs, delta, eX,
+                                              nx, ny, 0,
+                                              ctx.padding_mode == 'circular',
+                                              True, False)
                 dw = dw.reshape(co, ci, nw, nw)
 
         dx = None
         if ctx.needs_input_grad[0]:
+            # conv2d_input is the adjoint of the zero-padded convolution
+            # only; the circular-padding adjoint is not implemented. The
+            # filter gradient is correct for either boundary.
+            if ctx.padding_mode == 'circular':
+                raise NotImplementedError(
+                    "Xconv2D input gradient is not implemented for "
+                    "padding_mode='circular'; use padding_mode='zeros'.")
             dx = torch.nn.grad.conv2d_input(ctx.xshape, weight, grad_output,
                                             stride=ctx.stride, padding=ctx.padding,
                                             dilation=ctx.dilation, groups=ctx.groups)
@@ -61,14 +89,21 @@ class Xconv2D(torch.autograd.Function):
         if bias is not None and ctx.needs_input_grad[4]:
             db = grad_output.sum((0, 2, 3))
 
-        return dx, dw, None, None, db, None, None, None, None
+        return dx, dw, None, None, db, None, None, None, None, None
 
 
 class Xconv3D(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input, weight, ps=8, mode='all', bias=None, stride=1,
-                padding=0, dilation=1, groups=1):
+                padding=0, dilation=1, groups=1, padding_mode='zeros'):
+        if padding_mode not in ('zeros', 'circular'):
+            raise NotImplementedError(
+                "XConv supports padding_mode 'zeros' or 'circular', got "
+                f"{padding_mode!r}. The probed filter gradient shifts the "
+                "probing vectors, so it can only represent a zero or a "
+                "circular boundary.")
+
         seed = torch.randint(100000, (1,))
         b, ci, nx, ny, nz = input.shape
         with random_seed_torch(int(seed)):
@@ -82,10 +117,20 @@ class Xconv3D(torch.autograd.Function):
         ctx.padding = padding
         ctx.mode = mode
         ctx.ps = ps
+        ctx.padding_mode = padding_mode
 
         with torch.autograd.grad_mode.no_grad():
-            Y = F.conv3d(input, weight, bias=bias, stride=stride,
-                         padding=padding, groups=groups)
+            # The forward must use the boundary that the backward probe
+            # shift assumes, otherwise the filter gradient is biased.
+            if padding_mode == 'circular':
+                pd, ph, pw = _triple(padding)
+                Y = F.conv3d(F.pad(input, (pw, pw, ph, ph, pd, pd),
+                                   mode='circular'),
+                             weight, bias=bias, stride=stride, padding=0,
+                             groups=groups)
+            else:
+                Y = F.conv3d(input, weight, bias=bias, stride=stride,
+                             padding=padding, groups=groups)
 
         ctx.save_for_backward(eX, seed, weight, bias)
 
@@ -106,11 +151,21 @@ class Xconv3D(torch.autograd.Function):
             delta = dilate3d(grad_output, co, (nx, ny, nz), b, ctx.stride)
             with random_seed_torch(int(seed)):
                 dw = back_probe[ctx.mode](nx*ny*nz, ci, co, b, ctx.ps,
-                                          nw**3, offs, delta, eX)
+                                          nw**3, offs, delta, eX,
+                                          nx, ny, nz,
+                                          ctx.padding_mode == 'circular',
+                                          False, True)
             dw = dw.reshape(co, ci, nw, nw, nw)
 
         dx = None
         if ctx.needs_input_grad[0]:
+            # conv3d_input is the adjoint of the zero-padded convolution
+            # only; the circular-padding adjoint is not implemented. The
+            # filter gradient is correct for either boundary.
+            if ctx.padding_mode == 'circular':
+                raise NotImplementedError(
+                    "Xconv3D input gradient is not implemented for "
+                    "padding_mode='circular'; use padding_mode='zeros'.")
             dx = torch.nn.grad.conv3d_input(ctx.xshape, weight, grad_output,
                                             stride=ctx.stride, padding=ctx.padding,
                                             dilation=ctx.dilation, groups=ctx.groups)
@@ -119,7 +174,7 @@ class Xconv3D(torch.autograd.Function):
         if bias is not None and ctx.needs_input_grad[4]:
             db = grad_output.sum((0, 2, 3, 4))
 
-        return dx, dw, None, None, db, None, None, None, None
+        return dx, dw, None, None, db, None, None, None, None, None
 
 
 class Brelu(torch.autograd.Function):
