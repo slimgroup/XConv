@@ -17,21 +17,26 @@ dataset1 = datasets.CIFAR10('../data', train=True, download=True, transform=trai
 
 net = CIFARConvNet()
 
-batches =  [64, 128, 256, 1024]
-p_sizes = [0, 64, 256, 512]
+batches = [64, 128, 256, 1024]
+p_sizes = [0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 
 grads1 = {'%s%s'%(b, ps): [] for b in batches for ps in p_sizes}
 grads2 = {'%s%s'%(b, ps): [] for b in batches for ps in p_sizes}
 grads3 = {'%s%s'%(b, ps): [] for b in batches for ps in p_sizes}
 grads4 = {'%s%s'%(b, ps): [] for b in batches for ps in p_sizes}
 grads = [grads1, grads2, grads3, grads4]
-
 models = {}
 device = torch.device("cuda")
 
 for ps in p_sizes:
     model = copy.deepcopy(net)
-    convert_net(model, 'net', mode='conv' if ps>0 else 'relu', ps=ps, xmode="gaussian")
+    convert_net(
+        model, 
+        'net', 
+        mode='conv' if ps>0 else 'relu', 
+        ps=ps, 
+        xmode="independent"
+    )
     models[ps] = model.to(device)
 
 

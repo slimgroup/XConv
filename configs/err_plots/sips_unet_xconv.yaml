@@ -1,0 +1,36 @@
+sips_unet_xconv:
+  model_name: "sips_unet"
+  xconv_varn: "xconv"
+  img_dims: [64, 128, 256]
+  model_plot_name: "SIPS UNet [XConv]"
+  probing_vector_img_dims_batch_sizes_dict:
+    "base": 
+        28: 660
+        64: 200
+        128: 50
+        256: 12
+    "16": 
+        28: 660
+        64: 275
+        128: 68
+        256: 16
+    "32": 
+        28: 660
+        64: 273
+        128: 68
+        256: 16
+    "64":
+        28: 660
+        64: 270
+        128: 66
+        256: 16
+    "128":
+        28: 660
+        64: 263
+        128: 67
+        256: 16
+    "256":
+        28: 660
+        64: 250
+        128: 66
+        256: 16

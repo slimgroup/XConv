@@ -84,7 +84,7 @@ r2.weight = copy.deepcopy(r1.weight)
 r3.weight = copy.deepcopy(r1.weight)
 r4.weight = copy.deepcopy(r1.weight)
 
-xc = iter(train_loader).next()[0]
+xc = next(iter(train_loader))[0]
 xr = torch.randn(xc.shape)
 
 def ni(inp):
@@ -107,7 +107,7 @@ for (inp, namein) in zip([xc, xr], ['C10', '\mathcal{N}(0, 1)']):
             y4 = r4(inp)
             g4 = y4.grad_fn.apply(y4)
         elif nameout == 'C10':
-            y = iter(train_loader).next()[0]
+            y = next(iter(train_loader))[0]
             y1 = r1(inp)
             g1 = y1.grad_fn(y)
             y2 = r2(inp)
@@ -147,7 +147,7 @@ else:
 
 net0 = networks.CIFARConvNet().to(device)
 
-xt, target = iter(train_loader).next()
+xt, target = next(iter(train_loader))
 xt, target = xt.to(device), target.to(device)
 g = {}
 
@@ -175,7 +175,7 @@ for mode in [None, 'independent', 'gaussian', 'orthogonal']:
 
         for itr in range(100):
 
-            idxs = iter(train_loader_).next()
+            idxs = next(iter(train_loader_))
             xt_, target_ = xt[idxs], target[idxs]
 
             y_ = net(xt_)

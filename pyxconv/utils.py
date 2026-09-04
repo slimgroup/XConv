@@ -3,8 +3,133 @@ import contextlib
 
 from typing import Tuple
 
-__all__ = ['convert_net', 'update_ps', 'dilate2d', 'dilate3d', 'offsets2d', 'offsets3d',
+__all__ = ['convert_net', 'adaptive_convert_net', 'update_ps', 'dilate2d', 'dilate3d', 'offsets2d', 'offsets3d',
            'random_seed_torch', 'update_mode']
+
+
+def adaptive_convert_net(
+    module: torch, 
+    sample_input: torch.Tensor, 
+    ps: int =16, 
+    xmode: str ='gaussian', 
+    mode: str ='all', 
+    maxc: int =32001
+):
+    """
+    Recursively replaces all nn.Conv2d by SpatialGatedXConv via Two-Pass conversion.
+        Pass 1: run a dry forward to record each Conv2d's input HxW.
+        Pass 2: replace Conv2d -> Xconv2D ONLY when (H*W) > ps and channels < maxc.
+
+    sample_input: sample input tensor to the network for computing activation maps
+    
+    """
+    from .modules import Xconv2D, Xconv3D, BReLU
+    print("Probing vector is: {}".format(ps))
+
+    # ---------- Pass 1: collect input shapes ----------
+    # Map full module name -> (H, W) (max seen if multiple calls)
+    in_spatial: Dict[str, Tuple[int,int]] = {}
+
+    # Build a stable name map for all submodules
+    name_map = {m: n for n, m in module.named_modules()}  # module object -> dotted name
+    
+    def hook_fn(m, inputs, _output):
+        if not isinstance(m, torch.nn.Conv2d):
+            return
+        
+        # inputs is a tuple; first item is the input tensor to this module
+        x = inputs[0]
+        # Expect shape [B, C, H, W]
+        if x.dim() >= 4:
+            H, W = int(x.shape[-2]), int(x.shape[-1])
+            nm = name_map[m]
+            prev = in_spatial.get(nm)
+            area = H * W
+            if prev is None:
+                in_spatial[nm] = (H, W)
+            else:
+                # keep the largest area seen (handles multi-branch / multi-call)
+                if H * W > prev[0] * prev[1]:
+                    in_spatial[nm] = (H, W)
+
+    # Register hooks only on Conv2d
+    hooks = []
+    for m in module.modules():
+        if isinstance(m, torch.nn.Conv2d):
+            hooks.append(m.register_forward_hook(hook_fn))
+
+    # Dry forward (no grad)
+    module.eval()
+    with torch.no_grad():
+        _ = module(sample_input)
+
+    # Clean up hooks
+    for h in hooks:
+        h.remove()
+
+         # ---------- Pass 2: recursive replacement ----------
+    def _convert(m: torch.nn.Module, prefix: str = ''):
+        for child_name, child in list(m.named_children()):
+            full_name = f'{prefix}.{child_name}' if prefix else child_name
+
+            if isinstance(child, torch.nn.Conv2d) and mode in ['all', 'conv']:
+                # Only replace if we observed an input size and it exceeds ps
+                hw = in_spatial.get(full_name)
+                if hw is not None:
+                    H, W = hw
+                    if (H * W) > ps and child.in_channels < maxc and child.out_channels < maxc:
+                        b = child.bias is not None
+                        newconv = Xconv2D(
+                            child.in_channels,
+                            child.out_channels,
+                            child.kernel_size,
+                            ps=ps,
+                            mode=xmode,
+                            stride=child.stride,
+                            padding=child.padding,
+                            bias=b,
+                            padding_mode=child.padding_mode,
+                        )
+                        # Copy parameters (keep same tensors to preserve optimizer state if needed)
+                        newconv.weight = child.weight
+                        newconv.bias   = child.bias
+                        setattr(m, child_name, newconv)
+                    else:
+                        # keep as-is, but recurse inside (in case it's a Sequential etc.)
+                        _convert(child, full_name)
+                else:
+                    # If we never saw an input (dead branch), leave it untouched
+                    _convert(child, full_name)
+
+            elif isinstance(child, torch.nn.Conv3d) and mode in ['all', 'conv']:
+                if child.in_channels < maxc and child.out_channels < maxc:
+                    b = child.bias is not None
+                    newconv = Xconv3D(
+                        child.in_channels,
+                        child.out_channels,
+                        child.kernel_size,
+                        ps=ps,
+                        stride=child.stride,
+                        padding=child.padding,
+                        bias=b,
+                        mode=xmode,
+                        padding_mode=child.padding_mode,
+                    )
+                    newconv.weight = child.weight
+                    newconv.bias   = child.bias
+                    setattr(m, child_name, newconv)
+                else:
+                    _convert(child, full_name)
+
+            elif isinstance(child, torch.nn.ReLU) and mode in ['all', 'relu']:
+                from .modules import BReLU
+                setattr(m, child_name, BReLU(inplace=child.inplace))
+
+            else:
+                _convert(child, full_name)
+
+    _convert(module)
+    return module
 
 
 def convert_net(module, name='net', ps=16, xmode='gaussian', mode='all', maxc=32001):

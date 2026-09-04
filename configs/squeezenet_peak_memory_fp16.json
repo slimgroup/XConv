@@ -1,0 +1,11 @@
+{
+    "experiment_name": "squeezenet_peak_memory_fp16",
+    "img_dims": "128,256,512,1024",
+    "batch_sizes": "32,64,128,256,512",
+    "probing_vectors": "base,2,4,8,16,32,64,128,256,512,1024,2048,4096",
+    "precision": "fp16",
+    "seed": 0,
+    "gpu_id": 0,
+    "phase": "train",
+    "upload": 1
+}
