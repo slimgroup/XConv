@@ -1,5 +1,5 @@
 # Downloaded inputs and produced artifacts: everything here is fetched or regenerated.
-data/
+/data/
 results/
 figures/
 
