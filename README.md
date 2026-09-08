@@ -87,8 +87,6 @@ probing distribution and each boundary.
 
 ## Authors
 
-Developed at the Georgia Institute of Technology by the ML4Seismic Lab.
-
 - Mathias Louboutin — <mlouboutin3@gatech.edu>
 - Ali Siahkoohi — <alisk@ucf.edu>
 - Anirudh Thatipelli — <anirudh.thatipelli@ucf.edu>

@@ -32,22 +32,22 @@ script renders a result; anything else produces what one of them reads.
 |---|---|---|---|
 | 13 | CIFAR-10 training at equal memory | `scripts/fig_cifar_training.py` | `scripts/cifar10_train.py` |
 | 14 | facies classification, gradient error | `experiments/facies_classification/plot_avg_grad_err_vs_r.py` | `experiments/facies_classification/err_plot_configs/` |
-| 15 | MNIST generated samples | `experiments/sips/scripts/mnist_example.py` | `experiments/sips/configs/` |
-| 16 | MNIST FID against the probing-vector count | `experiments/sips/scripts/plot_fid.py` | `experiments/sips/scripts/compute_fid.py` |
+| 15 | MNIST generated samples | `experiments/mnist-generation/scripts/mnist_example.py` | `experiments/mnist-generation/configs/` |
+| 16 | MNIST FID against the probing-vector count | `experiments/mnist-generation/scripts/plot_fid.py` | `experiments/mnist-generation/scripts/compute_fid.py` |
 | 17 | CIFAR-10 gradient error | `experiments/cifar10-generation/scripts/plot_avg_grad_err_vs_r.py` | `experiments/cifar10-generation/configs/` |
 | 18 | CIFAR-10 generated samples | `experiments/cifar10-generation/scripts/cifar10.py` | `experiments/cifar10-generation/configs/cifar10_example.json` |
-| 20 | seismic gradient error | `experiments/genparihaka/scripts/plot_age_vs_r_curve.py` | `experiments/genparihaka/configs/` |
+| 20 | seismic gradient error | `experiments/seismic/scripts/plot_age_vs_r_curve.py` | `experiments/seismic/configs/` |
 | 21 | deep image prior, super-resolution | `experiments/deep-image-prior/scripts/super_resolution_table1.py` | `experiments/deep-image-prior/data/sr/` |
 | 22 | deep image prior, inpainting | `experiments/deep-image-prior/scripts/inpainting.py` | `experiments/deep-image-prior/data/inpainting/` |
 | 23a | TriConvUNeXt gradient error | `experiments/triconvunext/plot_age_vs_r_curve.py` | `experiments/triconvunext/err_plot_configs/` |
-| 23b | TriConvUNeXt peak memory | `experiments/sips/scripts/plot_memory_curves.py` | `experiments/triconvunext/compute_peak_memory.py` |
+| 23b | TriConvUNeXt peak memory | `experiments/mnist-generation/scripts/plot_memory_curves.py` | `experiments/triconvunext/compute_peak_memory.py` |
 | 23c | TriConvUNeXt training curves | `experiments/triconvunext/plot_train_val_loss_curves.py` | `experiments/triconvunext/train.py` |
 | 24 | gland segmentation, qualitative | `experiments/triconvunext/val.py` | `experiments/triconvunext/save_mask_black_white.py` |
 | 25 | spleen segmentation, axial slices | `experiments/3d-segmentation/visualize.py` | `experiments/3d-segmentation/run.py` |
 | 31a | super-resolution PSNR against peak memory | `experiments/deep-image-prior/scripts/plot_super_resolution_psnr_memory_curve.py` | — |
 | 31b | inpainting peak memory | `experiments/deep-image-prior/scripts/plot_inpainting_peak_memory_curve.py` | `experiments/deep-image-prior/scripts/compute_inpainting_peak_memory.py` |
 | 35 | MNIST accuracy against epoch | `scripts/fig_mnist_accuracy.py` | `scripts/mnist_train.py` |
-| 36 | U-Net DDPM training curves | `experiments/sips/scripts/plot_multiple_sips_plots.py` | — |
+| 36 | U-Net DDPM training curves | `experiments/mnist-generation/scripts/plot_multiple_sips_plots.py` | — |
 
 ## Tables
 
@@ -64,7 +64,7 @@ script renders a result; anything else produces what one of them reads.
 
 These have no generating script: Figure 1, the schematic; Tables 7, 8 and 9, the architecture
 listings; Figure 19, the seismic sample montages, whose tiles come from
-`experiments/genparihaka/genparihaka/utils/plotting.py`; and the unprocessed reference panels of
+`experiments/seismic/genparihaka/utils/plotting.py`; and the unprocessed reference panels of
 Figures 21, 22 and 24, which are crops of files under each experiment's `data/`.
 
 ## Data
